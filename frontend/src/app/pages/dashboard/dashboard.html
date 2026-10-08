@@ -1,0 +1,26 @@
+<section class="dashboard">
+  <div class="panel">
+    <h2>System foundation</h2>
+    <p>Signed in as {{ currentUser()?.username }} with {{ currentUser()?.role }} access.</p>
+  </div>
+
+  <div class="status-grid">
+    <article>
+      <span>Frontend</span>
+      <strong>Angular SPA</strong>
+      <p>Routing, shell layout, and HTTP client are configured.</p>
+    </article>
+
+    <article>
+      <span>Backend</span>
+      <strong>{{ apiStatus() }}</strong>
+      <p>{{ apiStatusDetail() }}</p>
+    </article>
+
+    <article>
+      <span>Database</span>
+      <strong>PostgreSQL</strong>
+      <p>SQLAlchemy models and Alembic migrations are configured.</p>
+    </article>
+  </div>
+</section>

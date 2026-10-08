@@ -1,0 +1,56 @@
+.dashboard {
+  display: grid;
+  gap: 22px;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+h2 {
+  font-size: 24px;
+  margin: 0 0 10px;
+}
+
+p {
+  color: #526173;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.status-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+article {
+  background: #ffffff;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 18px;
+}
+
+span {
+  color: #41627f;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+strong {
+  color: #172033;
+  font-size: 20px;
+}
+
+@media (max-width: 760px) {
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}

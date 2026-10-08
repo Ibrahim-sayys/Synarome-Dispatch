@@ -13,6 +13,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:4200",
         "http://127.0.0.1:4200",
+        "http://localhost:1711",
+        "http://127.0.0.1:1711",
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -1,0 +1,26 @@
+<section class="login-page">
+  <form [formGroup]="loginForm" (ngSubmit)="submit()" class="login-form">
+    <div>
+      <p class="eyebrow">Secure access</p>
+      <h2>Sign in</h2>
+    </div>
+
+    <label>
+      Username
+      <input type="text" formControlName="username" autocomplete="username" />
+    </label>
+
+    <label>
+      Password
+      <input type="password" formControlName="password" autocomplete="current-password" />
+    </label>
+
+    @if (errorMessage()) {
+      <p class="error">{{ errorMessage() }}</p>
+    }
+
+    <button type="submit" [disabled]="loginForm.invalid || isSubmitting()">
+      {{ isSubmitting() ? 'Signing in...' : 'Sign in' }}
+    </button>
+  </form>
+</section>

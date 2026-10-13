@@ -1,14 +1,69 @@
-<header class="app-header">
-  <div>
-    <p class="eyebrow">Synarome Dispatch</p>
-    <h1>Bilty and WhatsApp dispatch management</h1>
-  </div>
-  <nav aria-label="Primary navigation">
-    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Dashboard</a>
-    <a routerLink="/login" routerLinkActive="active">Login</a>
-  </nav>
-</header>
+@if (!isLoginPage()) {
+  <header class="app-header">
+    <div>
+      <div class="brand-lockup">
+        <img src="/logo.png" alt="Company logo" />
+        <p class="eyebrow">Synarome Dispatch</p>
+      </div>
+    </div>
+    <div class="nav-area">
+      <nav aria-label="Primary navigation">
+        <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+        @if (canManageUsers()) {
+          <a routerLink="/users" routerLinkActive="active">Users</a>
+        }
+        <a routerLink="/contacts" routerLinkActive="active">Contacts</a>
+      </nav>
+
+      <div class="account-menu">
+        <button type="button" class="account-button" (click)="toggleAccountMenu()">
+          {{ currentUser()?.username || 'Account' }}
+        </button>
+
+        @if (isAccountMenuOpen) {
+          <div class="account-dropdown">
+            <button type="button" (click)="openPasswordDialog()">Change password</button>
+            <button type="button" (click)="toggleTheme()">
+              {{ theme === 'dark' ? 'Light theme' : 'Dark theme' }}
+            </button>
+            <button type="button" (click)="logout()">Logout</button>
+          </div>
+        }
+      </div>
+    </div>
+  </header>
+}
 
 <main class="app-main">
   <router-outlet />
 </main>
+
+@if (isPasswordDialogOpen) {
+  <div class="modal-backdrop">
+    <form class="password-modal" [formGroup]="passwordForm" (ngSubmit)="changePassword()">
+      <div>
+        <p class="eyebrow">Account security</p>
+        <h2>Change password</h2>
+      </div>
+
+      <label>
+        Current password
+        <input type="password" formControlName="currentPassword" autocomplete="current-password" />
+      </label>
+
+      <label>
+        New password
+        <input type="password" formControlName="newPassword" autocomplete="new-password" />
+      </label>
+
+      @if (passwordMessage) {
+        <p class="error">{{ passwordMessage }}</p>
+      }
+
+      <div class="modal-actions">
+        <button type="button" class="secondary" (click)="closePasswordDialog()">Cancel</button>
+        <button type="submit" [disabled]="passwordForm.invalid">Update password</button>
+      </div>
+    </form>
+  </div>
+}

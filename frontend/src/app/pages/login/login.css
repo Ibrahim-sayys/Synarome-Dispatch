@@ -1,12 +1,13 @@
 .login-page {
   display: grid;
-  min-height: 58dvh;
+  min-height: 100dvh;
   place-items: center;
+  padding: 24px;
 }
 
 .login-form {
-  background: #ffffff;
-  border: 1px solid #d8dee8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   display: grid;
   gap: 18px;
@@ -15,8 +16,16 @@
   width: 100%;
 }
 
+.company-logo {
+  display: block;
+  max-height: 96px;
+  max-width: 220px;
+  object-fit: contain;
+  justify-self: center;
+}
+
 .eyebrow {
-  color: #41627f;
+  color: var(--text-subtle);
   font-size: 12px;
   font-weight: 700;
   margin: 0 0 6px;
@@ -29,26 +38,28 @@ h2 {
 }
 
 label {
-  color: #314154;
+  color: var(--text-main);
   display: grid;
   font-weight: 700;
   gap: 8px;
 }
 
 input {
-  border: 1px solid #bcc8d6;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
+  color: var(--text-main);
   font: inherit;
   padding: 12px;
 }
 
 input:focus {
-  border-color: #2b6f9f;
-  outline: 3px solid #d8ecf9;
+  border-color: var(--primary);
+  outline: 3px solid var(--primary-soft);
 }
 
 button {
-  background: #1d5d83;
+  background: var(--primary);
   border: 0;
   border-radius: 6px;
   color: #ffffff;
@@ -59,15 +70,15 @@ button {
 }
 
 button:disabled {
-  background: #8fa2b3;
+  background: var(--disabled);
   cursor: not-allowed;
 }
 
 .error {
-  background: #fdecea;
-  border: 1px solid #f3b3ad;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
-  color: #9b241b;
+  color: var(--danger);
   margin: 0;
   padding: 10px 12px;
 }

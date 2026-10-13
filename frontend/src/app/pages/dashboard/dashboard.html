@@ -8,7 +8,7 @@
     <article>
       <span>Frontend</span>
       <strong>Angular SPA</strong>
-      <p>Routing, shell layout, and HTTP client are configured.</p>
+      <p>Login, users, and contacts screens are wired through authenticated routes.</p>
     </article>
 
     <article>
@@ -20,7 +20,14 @@
     <article>
       <span>Database</span>
       <strong>PostgreSQL</strong>
-      <p>SQLAlchemy models and Alembic migrations are configured.</p>
+      <p>User and marketing person data is managed through SQLAlchemy models.</p>
     </article>
+  </div>
+
+  <div class="workflow-grid">
+    @if (canManageUsers()) {
+      <a routerLink="/users">Manage users</a>
+    }
+    <a routerLink="/contacts">Open contact directory</a>
   </div>
 </section>

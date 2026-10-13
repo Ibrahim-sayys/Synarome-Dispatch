@@ -37,7 +37,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("full_name", sa.String(length=150), nullable=False),
         sa.Column("phone_number", sa.String(length=30), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column("added_by", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(["added_by"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),

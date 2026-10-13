@@ -1,22 +1,35 @@
 :host {
   display: block;
   min-height: 100dvh;
-  background: #f6f8fb;
-  color: #172033;
+  background: var(--app-bg);
+  color: var(--text-main);
   font-family: Arial, Helvetica, sans-serif;
 }
 
 .app-header {
   align-items: center;
-  background: #ffffff;
-  border-bottom: 1px solid #d8dee8;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   padding: 20px clamp(20px, 4vw, 48px);
 }
 
+.brand-lockup {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.brand-lockup img {
+  display: block;
+  height: 40px;
+  object-fit: contain;
+  width: auto;
+}
+
 .eyebrow {
-  color: #41627f;
+  color: var(--text-subtle);
   font-size: 13px;
   font-weight: 700;
   margin: 0 0 6px;
@@ -34,18 +47,61 @@ nav {
   gap: 8px;
 }
 
-a {
+.nav-area {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+}
+
+a,
+.account-button,
+.account-dropdown button,
+.modal-actions button {
   border-radius: 6px;
-  color: #2b526d;
+  border: 0;
+  color: var(--primary-strong);
+  cursor: pointer;
+  font: inherit;
   font-weight: 700;
   padding: 10px 12px;
   text-decoration: none;
 }
 
 a.active,
-a:hover {
-  background: #e6f0f7;
-  color: #15384f;
+a:hover,
+.account-button:hover,
+.account-dropdown button:hover {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-button {
+  background: var(--app-bg);
+  border: 1px solid var(--border);
+}
+
+.account-dropdown {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px var(--shadow);
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 10;
+}
+
+.account-dropdown button {
+  background: var(--surface);
+  text-align: left;
 }
 
 .app-main {
@@ -54,10 +110,94 @@ a:hover {
   padding: 28px clamp(20px, 4vw, 48px);
 }
 
+.modal-backdrop {
+  align-items: center;
+  background: rgba(23, 32, 51, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 20;
+}
+
+.password-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
+  padding: 24px;
+  width: 100%;
+}
+
+.password-modal h2 {
+  margin: 0;
+}
+
+.password-modal label {
+  color: var(--text-main);
+  display: grid;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.password-modal input {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-main);
+  border-radius: 6px;
+  font: inherit;
+  padding: 11px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.modal-actions button[type='submit'] {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.modal-actions button:disabled {
+  background: var(--disabled);
+  cursor: not-allowed;
+}
+
+.secondary {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.error {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  color: var(--danger);
+  margin: 0;
+  padding: 10px 12px;
+}
+
 @media (max-width: 680px) {
   .app-header {
     align-items: flex-start;
     flex-direction: column;
     gap: 16px;
+  }
+
+  .nav-area,
+  nav {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .account-dropdown {
+    left: 0;
+    right: auto;
   }
 }

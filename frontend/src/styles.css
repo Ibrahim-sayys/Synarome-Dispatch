@@ -1,1 +1,67 @@
-/* You can add global styles to this file, and also import other style files */
+html {
+  --app-bg: #f6f8fb;
+  --surface: #ffffff;
+  --surface-soft: #eef4f8;
+  --border: #d8dee8;
+  --border-strong: #bcc8d6;
+  --text-main: #172033;
+  --text-muted: #526173;
+  --text-subtle: #41627f;
+  --primary: #1d5d83;
+  --primary-strong: #15384f;
+  --primary-soft: #e6f0f7;
+  --success: #1d6b37;
+  --success-soft: #e8f5ec;
+  --danger: #9b241b;
+  --danger-soft: #fdecea;
+  --danger-border: #f3b3ad;
+  --disabled: #8fa2b3;
+  --shadow: rgba(23, 32, 51, 0.12);
+  background: var(--app-bg);
+  color: var(--text-main);
+}
+
+html[data-theme='dark'] {
+  --app-bg: #101820;
+  --surface: #182330;
+  --surface-soft: #223142;
+  --border: #344456;
+  --border-strong: #506174;
+  --text-main: #f5f7fb;
+  --text-muted: #c3cfdd;
+  --text-subtle: #9fb3c8;
+  --primary: #5aa7d6;
+  --primary-strong: #d8ecf9;
+  --primary-soft: #223a4d;
+  --success: #74d99f;
+  --success-soft: #183d2a;
+  --danger: #ffb3ad;
+  --danger-soft: #4b201f;
+  --danger-border: #8d3934;
+  --disabled: #667586;
+  --shadow: rgba(0, 0, 0, 0.34);
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--text-main);
+  margin: 0;
+}
+
+input,
+select {
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+button,
+input,
+select {
+  color-scheme: light;
+}
+
+html[data-theme='dark'] button,
+html[data-theme='dark'] input,
+html[data-theme='dark'] select {
+  color-scheme: dark;
+}

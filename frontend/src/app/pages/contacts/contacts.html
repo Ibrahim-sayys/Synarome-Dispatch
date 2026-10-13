@@ -1,0 +1,83 @@
+<section class="contacts-page">
+  <div class="section-header">
+    <div>
+      <p class="eyebrow">Recipient directory</p>
+      <h2>Marketing persons</h2>
+    </div>
+    <label class="search">
+      Search
+      <input type="search" [value]="searchTerm()" (input)="search($any($event.target).value)" />
+    </label>
+  </div>
+
+  <form [formGroup]="contactForm" (ngSubmit)="saveContact()" class="contact-form">
+    <label>
+      Full name
+      <input type="text" formControlName="full_name" autocomplete="off" />
+    </label>
+
+    <label>
+      Phone number
+      <input type="tel" formControlName="phone_number" autocomplete="off" />
+    </label>
+
+    <button type="submit" [disabled]="contactForm.invalid || isSaving()">
+      {{ isSaving() ? 'Saving...' : 'Add contact' }}
+    </button>
+  </form>
+
+  @if (message()) {
+    <p class="message" [class.error-message]="isErrorMessage()">{{ message() }}</p>
+  }
+
+  <div class="contact-list">
+    @for (contact of filteredContacts(); track contact.id) {
+      <article>
+        <div>
+          <strong>{{ contact.full_name }}</strong>
+          <p>{{ contact.phone_number }}</p>
+        </div>
+        <span [class.inactive]="!contact.is_active">{{ contact.is_active ? 'Active' : 'Inactive' }}</span>
+        <p class="suspended-by">
+          {{ contact.is_active ? '' : 'Suspended by ' + (contact.suspended_by_username || 'unknown') }}
+        </p>
+        <div class="actions">
+          <button type="button" class="icon-button" aria-label="Edit contact" title="Edit contact" (click)="editContact(contact)">
+            &#9998;
+          </button>
+        </div>
+      </article>
+    }
+  </div>
+</section>
+
+@if (editingContact()) {
+  <div class="modal-backdrop">
+    <form class="edit-modal" [formGroup]="editForm" (ngSubmit)="updateContact()">
+      <div>
+        <p class="eyebrow">Edit contact</p>
+        <h2>{{ editingContact()?.full_name }}</h2>
+      </div>
+
+      <label>
+        Full name
+        <input type="text" formControlName="full_name" autocomplete="off" />
+      </label>
+
+      <label>
+        Phone number
+        <input type="tel" formControlName="phone_number" autocomplete="off" />
+      </label>
+
+      <div class="modal-actions">
+        @if (editingContact()?.is_active) {
+          <button type="button" class="danger" [disabled]="isSaving()" (click)="setSuspendedStatus(true)">Suspend</button>
+        } @else {
+          <button type="button" class="success" [disabled]="isSaving()" (click)="setSuspendedStatus(false)">Unsuspend</button>
+        }
+        <button type="button" class="secondary" (click)="closeEditDialog()">Cancel</button>
+        <button type="submit" [disabled]="editForm.invalid || isSaving()">Save changes</button>
+      </div>
+    </form>
+  </div>
+}

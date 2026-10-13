@@ -4,8 +4,8 @@
 }
 
 .panel {
-  background: #ffffff;
-  border: 1px solid #d8dee8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 24px;
 }
@@ -16,7 +16,7 @@ h2 {
 }
 
 p {
-  color: #526173;
+  color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
 }
@@ -28,8 +28,8 @@ p {
 }
 
 article {
-  background: #ffffff;
-  border: 1px solid #d8dee8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   display: grid;
   gap: 8px;
@@ -38,19 +38,36 @@ article {
 }
 
 span {
-  color: #41627f;
+  color: var(--text-subtle);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 strong {
-  color: #172033;
+  color: var(--text-main);
   font-size: 20px;
 }
 
+.workflow-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workflow-grid a {
+  background: var(--primary);
+  border-radius: 6px;
+  color: #ffffff;
+  font-weight: 700;
+  padding: 14px 16px;
+  text-align: center;
+  text-decoration: none;
+}
+
 @media (max-width: 760px) {
-  .status-grid {
+  .status-grid,
+  .workflow-grid {
     grid-template-columns: 1fr;
   }
 }

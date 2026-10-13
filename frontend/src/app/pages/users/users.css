@@ -1,0 +1,145 @@
+.users-page {
+  display: grid;
+  gap: 18px;
+}
+
+.section-header,
+.management-form,
+.table-wrap,
+.reset-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.eyebrow {
+  color: var(--text-subtle);
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+h2 {
+  margin: 0;
+}
+
+.management-form {
+  align-items: end;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+label {
+  color: var(--text-main);
+  display: grid;
+  font-weight: 700;
+  gap: 8px;
+}
+
+input,
+select {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-main);
+  font: inherit;
+  min-width: 0;
+  padding: 11px;
+}
+
+button {
+  background: var(--primary);
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  min-height: 43px;
+  padding: 11px 14px;
+}
+
+button:disabled {
+  background: var(--disabled);
+  cursor: not-allowed;
+}
+
+.secondary {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+
+.message {
+  color: var(--primary);
+  font-weight: 700;
+  margin: 0;
+}
+
+.error-message {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  color: var(--danger);
+  padding: 10px 12px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 12px;
+  text-align: left;
+}
+
+th {
+  color: var(--text-subtle);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.muted,
+.modal-copy {
+  color: var(--text-muted);
+}
+
+.modal-backdrop {
+  align-items: center;
+  background: rgba(16, 24, 32, 0.58);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 20;
+}
+
+.reset-modal {
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
+  width: 100%;
+}
+
+.reset-modal h2,
+.modal-copy {
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 860px) {
+  .management-form {
+    grid-template-columns: 1fr;
+  }
+}

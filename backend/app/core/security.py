@@ -20,14 +20,15 @@ def verify_password(password: str, password_hash: str) -> bool:
     )
 
 
-def create_access_token(subject: str, role: str | None = None) -> str:
+def create_access_token(subject: str, role: str | None = None, session_version: int = 0) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
     payload = {
         "sub": subject,
-        "exp": expire
+        "exp": expire,
+        "session_version": session_version,
     }
     if role:
         payload["role"] = role

@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
+import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
 
 @Component({
   selector: 'app-contacts',
@@ -15,19 +16,23 @@ export class Contacts implements OnInit {
   protected readonly isSaving = signal(false);
   protected readonly message = signal('');
   protected readonly isErrorMessage = signal(false);
+  protected readonly selectedContact = signal<MarketingPerson | null>(null);
+  protected readonly contactHistory = signal<DispatchRecord[]>([]);
+  protected readonly isLoadingContactHistory = signal(false);
   protected readonly filteredContacts = computed(() => this.contacts());
 
   private readonly contactsService = inject(ContactsService);
+  private readonly dispatchService = inject(DispatchService);
   private readonly formBuilder = inject(NonNullableFormBuilder);
 
   protected readonly contactForm = this.formBuilder.group({
     full_name: ['', [Validators.required, Validators.minLength(2)]],
-    phone_number: ['', [Validators.required, Validators.minLength(10)]],
+    phone_number: ['', [Validators.required, Validators.minLength(11)]],
   });
 
   protected readonly editForm = this.formBuilder.group({
     full_name: ['', [Validators.required, Validators.minLength(2)]],
-    phone_number: ['', [Validators.required, Validators.minLength(10)]],
+    phone_number: ['', [Validators.required, Validators.minLength(11)]],
     is_active: [true],
   });
 
@@ -85,6 +90,32 @@ export class Contacts implements OnInit {
       phone_number: contact.phone_number,
       is_active: contact.is_active,
     });
+  }
+
+  protected openContactHistory(contact: MarketingPerson): void {
+    this.selectedContact.set(contact);
+    this.contactHistory.set([]);
+    this.isLoadingContactHistory.set(true);
+    this.dispatchService.listHistory({ person_id: contact.id }).subscribe({
+      next: (history) => {
+        this.contactHistory.set(history);
+        this.isLoadingContactHistory.set(false);
+      },
+      error: () => {
+        this.showMessage('Unable to load contact messages.', true);
+        this.isLoadingContactHistory.set(false);
+      },
+    });
+  }
+
+  protected closeContactHistory(): void {
+    this.selectedContact.set(null);
+    this.contactHistory.set([]);
+  }
+
+  protected statusText(record: DispatchRecord): string {
+    const sent = record.recipients.filter((recipient) => recipient.delivery_status === 'sent').length;
+    return `${sent}/${record.recipients.length} sent`;
   }
 
   protected updateContact(): void {

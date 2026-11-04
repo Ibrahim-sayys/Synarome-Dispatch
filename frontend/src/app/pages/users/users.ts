@@ -47,6 +47,36 @@ export class Users implements OnInit {
     password: ['', [Validators.required, Validators.minLength(8)]],
   });
 
+  protected get createUserPassword(): string {
+    return this.userForm.get('password')?.value || '';
+  }
+
+  protected get resetUserPassword(): string {
+    return this.resetForm.get('password')?.value || '';
+  }
+
+  protected getPasswordStrength(password: string): { label: string; class: string; width: string } {
+    if (!password) {
+      return { label: '', class: '', width: '0%' };
+    }
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 10) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    if (score <= 1) {
+      return { label: 'Weak', class: 'weak', width: '25%' };
+    } else if (score === 2) {
+      return { label: 'Fair', class: 'fair', width: '50%' };
+    } else if (score === 3 || score === 4) {
+      return { label: 'Good', class: 'good', width: '75%' };
+    } else {
+      return { label: 'Strong', class: 'strong', width: '100%' };
+    }
+  }
+
   ngOnInit(): void {
     this.loadUsers();
   }

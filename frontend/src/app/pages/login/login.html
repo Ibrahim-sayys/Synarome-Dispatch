@@ -1,6 +1,7 @@
 <section class="login-page">
   <form [formGroup]="loginForm" (ngSubmit)="submit()" class="login-form">
-    <img class="company-logo" src="/logo.png" alt="Company logo" />
+    <img class="company-logo logo-light" src="/logo.png" alt="Company logo" />
+    <img class="company-logo logo-dark" src="/logo-dark.png" alt="Company logo" />
 
     <div>
       <p class="eyebrow">Secure access</p>
@@ -9,13 +10,17 @@
 
     <label>
       Username
-      <input type="text" formControlName="username" autocomplete="username" />
+      <input type="text" placeholder="Enter your username" formControlName="username" autocomplete="username" />
     </label>
 
     <label>
       Password
-      <input type="password" formControlName="password" autocomplete="current-password" />
+      <input type="password" placeholder="Enter your password" formControlName="password" autocomplete="current-password" />
     </label>
+
+    @if (infoMessage()) {
+      <p class="info-message">{{ infoMessage() }}</p>
+    }
 
     @if (errorMessage()) {
       <p class="error">{{ errorMessage() }}</p>

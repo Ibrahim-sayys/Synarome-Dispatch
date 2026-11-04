@@ -6,19 +6,19 @@
     </div>
     <label class="search">
       Search
-      <input type="search" [value]="searchTerm()" (input)="search($any($event.target).value)" />
+      <input type="search" placeholder="Search contacts..." [value]="searchTerm()" (input)="search($any($event.target).value)" />
     </label>
   </div>
 
   <form [formGroup]="contactForm" (ngSubmit)="saveContact()" class="contact-form">
     <label>
       Full name
-      <input type="text" formControlName="full_name" autocomplete="off" />
+      <input type="text" placeholder="e.g. Muhammad Usman" formControlName="full_name" autocomplete="off" />
     </label>
 
     <label>
       Phone number
-      <input type="tel" formControlName="phone_number" autocomplete="off" />
+      <input type="tel" placeholder="03xxxxxxxx" formControlName="phone_number" autocomplete="off" />
     </label>
 
     <button type="submit" [disabled]="contactForm.invalid || isSaving()">
@@ -32,17 +32,18 @@
 
   <div class="contact-list">
     @for (contact of filteredContacts(); track contact.id) {
-      <article>
+      <article class="contact-card" (click)="openContactHistory(contact)" tabindex="0" (keydown.enter)="openContactHistory(contact)">
         <div>
           <strong>{{ contact.full_name }}</strong>
           <p>{{ contact.phone_number }}</p>
+          <small class="contact-hint">Click to view messages</small>
         </div>
         <span [class.inactive]="!contact.is_active">{{ contact.is_active ? 'Active' : 'Inactive' }}</span>
         <p class="suspended-by">
           {{ contact.is_active ? '' : 'Suspended by ' + (contact.suspended_by_username || 'unknown') }}
         </p>
         <div class="actions">
-          <button type="button" class="icon-button" aria-label="Edit contact" title="Edit contact" (click)="editContact(contact)">
+          <button type="button" class="icon-button" aria-label="Edit contact" title="Edit contact" (click)="$event.stopPropagation(); editContact(contact)">
             &#9998;
           </button>
         </div>
@@ -61,12 +62,12 @@
 
       <label>
         Full name
-        <input type="text" formControlName="full_name" autocomplete="off" />
+        <input type="text" placeholder="e.g. Muhammad Usman" formControlName="full_name" autocomplete="off" />
       </label>
 
       <label>
         Phone number
-        <input type="tel" formControlName="phone_number" autocomplete="off" />
+        <input type="tel" placeholder="03xxxxxxxx" formControlName="phone_number" autocomplete="off" />
       </label>
 
       <div class="modal-actions">
@@ -79,5 +80,39 @@
         <button type="submit" [disabled]="editForm.invalid || isSaving()">Save changes</button>
       </div>
     </form>
+  </div>
+}
+
+@if (selectedContact(); as contact) {
+  <div class="modal-backdrop" (click)="closeContactHistory()">
+    <section class="history-modal" (click)="$event.stopPropagation()">
+      <div class="history-modal-header">
+        <div>
+          <p class="eyebrow">Contact conversation</p>
+          <h2>{{ contact.full_name }}</h2>
+          <p class="modal-copy">{{ contact.phone_number }} · {{ contactHistory().length }} dispatches</p>
+        </div>
+        <button type="button" class="secondary close-button" (click)="closeContactHistory()" aria-label="Close">&times;</button>
+      </div>
+
+      @if (isLoadingContactHistory()) {
+        <p class="history-loading">Loading messages...</p>
+      } @else {
+        <div class="contact-history-list">
+          @for (record of contactHistory(); track record.id) {
+            <article class="contact-history-card">
+              <div class="history-card-meta">
+                <strong>{{ record.sender?.username || 'Unknown user' }}</strong>
+                <span>{{ record.timestamp || '-' }}</span>
+              </div>
+              <p>{{ record.message_text || 'Attachment sent without a text message.' }}</p>
+              <span class="history-status">{{ statusText(record) }}</span>
+            </article>
+          } @empty {
+            <div class="history-empty-state">No messages have been sent to this contact yet.</div>
+          }
+        </div>
+      }
+    </section>
   </div>
 }

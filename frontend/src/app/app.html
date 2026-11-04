@@ -2,7 +2,8 @@
   <header class="app-header">
     <div>
       <div class="brand-lockup">
-        <img src="/logo.png" alt="Company logo" />
+        <img class="logo-light" src="/logo.png" alt="Company logo" />
+        <img class="logo-dark" src="/logo-dark.png" alt="Company logo" />
         <p class="eyebrow">Synarome Dispatch</p>
       </div>
     </div>
@@ -13,10 +14,11 @@
           <a routerLink="/users" routerLinkActive="active">Users</a>
         }
         <a routerLink="/contacts" routerLinkActive="active">Contacts</a>
+        <a routerLink="/dispatch" routerLinkActive="active">Dispatch</a>
       </nav>
 
       <div class="account-menu">
-        <button type="button" class="account-button" (click)="toggleAccountMenu()">
+        <button type="button" class="account-button" (click)="toggleAccountMenu($event)">
           {{ currentUser()?.username || 'Account' }}
         </button>
 
@@ -48,13 +50,26 @@
 
       <label>
         Current password
-        <input type="password" formControlName="currentPassword" autocomplete="current-password" />
+        <input type="password" placeholder="Enter current password" formControlName="currentPassword" autocomplete="current-password" />
       </label>
 
       <label>
         New password
-        <input type="password" formControlName="newPassword" autocomplete="new-password" />
+        <input type="password" placeholder="Enter new password (min. 8 characters)" formControlName="newPassword" autocomplete="new-password" />
       </label>
+
+      @if (newPasswordValue) {
+        @let strength = getPasswordStrength(newPasswordValue);
+        <div class="password-strength-container">
+          <div class="strength-track">
+            <div class="strength-bar" [class]="strength.class" [style.width]="strength.width"></div>
+          </div>
+          <div class="strength-meta">
+            <span class="strength-tag" [class]="strength.class">{{ strength.label }}</span>
+            <span class="strength-hint">Use 8+ chars with uppercase, numbers & symbols</span>
+          </div>
+        </div>
+      }
 
       @if (passwordMessage) {
         <p class="error">{{ passwordMessage }}</p>

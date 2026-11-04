@@ -1,0 +1,429 @@
+<section class="dispatch-page">
+  <!-- Top Page Header -->
+  <div class="dispatch-header">
+    <div>
+      <p class="eyebrow">WhatsApp Broadcast Hub</p>
+      <h2>Bilty & Message Dispatch</h2>
+      <p class="header-subtitle">Broadcast bilty documents, updates, and files directly to marketing contacts via WhatsApp Cloud API.</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="secondary-btn" (click)="loadHistory()" [disabled]="isLoadingHistory()">
+        &#x21bb; {{ isLoadingHistory() ? 'Loading...' : 'Refresh history' }}
+      </button>
+    </div>
+  </div>
+
+  @if (message()) {
+    <div class="dispatch-alert" [class.alert-error]="isErrorMessage()">
+      <span>{{ isErrorMessage() ? '&#9888;' : '&#10003;' }}</span>
+      <p>{{ message() }}</p>
+    </div>
+  }
+
+  <!-- Main 2-Column Command Center -->
+  <div class="dispatch-workspace">
+    <!-- LEFT / HERO: The Wide Dispatch Console (62% width) -->
+    <form [formGroup]="dispatchForm" (ngSubmit)="sendDispatch()" class="dispatch-console">
+      <div class="console-topbar">
+        <div class="console-title">
+          <span class="hub-icon">&#128227;</span>
+          <div>
+            <h3>Compose Broadcast</h3>
+            <p>Select contacts and prepare your message or bilty attachment</p>
+          </div>
+        </div>
+        <div class="selection-pill" [class.has-selection]="selectedCount() > 0">
+          <strong>{{ selectedCount() }}</strong>
+          <span>selected</span>
+        </div>
+      </div>
+
+      <!-- 2-Column Internal Layout: Recipients on Left, Composer on Right -->
+      <div class="console-grid">
+        <!-- Inner Column 1: Recipient Directory Picker -->
+        <div class="recipient-picker">
+          <div class="picker-header">
+            <h4>Select Recipients</h4>
+            <div class="picker-actions">
+              @if (!isAllFilteredSelected()) {
+                <button type="button" class="text-btn" (click)="selectAllRecipients()">Select all</button>
+              }
+              @if (selectedCount() > 0) {
+                <button type="button" class="text-btn danger" (click)="clearRecipients()">Clear</button>
+              }
+            </div>
+          </div>
+
+          <!-- Contact Search Bar -->
+          <div class="search-box">
+            <span class="search-icon">&#128269;</span>
+            <input
+              type="search"
+              placeholder="Search by name or 03..."
+              [value]="contactSearchTerm()"
+              (input)="searchContacts($any($event.target).value)"
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- Contact List Checkcards -->
+          <div class="recipient-scrollbox">
+            @for (contact of filteredContacts(); track contact.id) {
+              <label class="contact-checkcard" [class.selected]="contactIsSelected(contact.id)">
+                <input
+                  type="checkbox"
+                  [checked]="contactIsSelected(contact.id)"
+                  (change)="toggleRecipient(contact.id, $any($event.target).checked)"
+                />
+                <div class="contact-avatar">{{ getInitials(contact.full_name) }}</div>
+                <div class="contact-details">
+                  <strong>{{ contact.full_name }}</strong>
+                  <small>{{ contact.phone_number }}</small>
+                </div>
+              </label>
+            } @empty {
+              <div class="empty-recipients">
+                <p>No active contacts found.</p>
+                <small>Try a different search term or add contacts in the directory.</small>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Inner Column 2: Message & Media Composer -->
+        <div class="message-composer">
+          <div class="composer-header">
+            <h4>Message & Media</h4>
+            <span class="composer-hint">Plain text & bilty attachments</span>
+          </div>
+
+          <!-- Textarea -->
+          <div class="form-field">
+            <label for="dispatch-message">Message text</label>
+            <textarea
+              id="dispatch-message"
+              rows="6"
+              formControlName="message_text"
+              placeholder="Type your WhatsApp message, bilty notes, or dispatch instructions here..."
+            ></textarea>
+          </div>
+
+          <!-- File Attachment Zone -->
+          <div class="form-field attachment-field">
+            <div class="attachment-label-row">
+              <label>Attachment (Bilty Document / Image)</label>
+              @if (selectedFile()) {
+                <span class="attachment-status-pill">&#10003; Attached</span>
+              }
+            </div>
+
+            @if (selectedFile(); as file) {
+              @if (isSelectedFileImage() && selectedFilePreviewUrl()) {
+                <!-- Rich Image Attachment Preview Card -->
+                <div class="image-preview-card">
+                  <div class="image-thumbnail-wrapper" (click)="openLightbox(selectedFilePreviewUrl()!, file.name)">
+                    <img [src]="selectedFilePreviewUrl()" [alt]="file.name" class="image-preview-thumbnail" />
+                    <div class="image-thumbnail-overlay" title="Click to view full image">
+                      <span class="overlay-icon">&#128269;</span>
+                      <span class="overlay-text">Full preview</span>
+                    </div>
+                  </div>
+                  <div class="image-preview-details">
+                    <div class="preview-badge-row">
+                      <span class="preview-type-chip">&#128444; Image Bilty</span>
+                      <span class="preview-size-chip">{{ formatFileSize(file.size) }}</span>
+                    </div>
+                    <strong class="image-preview-name" [title]="file.name">{{ file.name }}</strong>
+                    <div class="image-preview-actions">
+                      <button
+                        type="button"
+                        class="preview-btn-primary"
+                        (click)="openLightbox(selectedFilePreviewUrl()!, file.name)"
+                        title="Open full resolution preview"
+                      >
+                        &#128065; Preview full size
+                      </button>
+                      <button
+                        type="button"
+                        class="preview-btn-remove"
+                        (click)="removeFile()"
+                        title="Remove attached image"
+                      >
+                        &times; Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              } @else {
+                <!-- PDF / Document Attachment Card -->
+                <div class="doc-preview-card">
+                  <div class="doc-icon-badge">
+                    <span class="doc-badge-icon">&#128196;</span>
+                    <span class="doc-badge-type">PDF</span>
+                  </div>
+                  <div class="doc-details">
+                    <strong class="doc-name" [title]="file.name">{{ file.name }}</strong>
+                    <span class="doc-meta">{{ formatFileSize(file.size) }} &bull; Document Attachment</span>
+                  </div>
+                  <button type="button" class="remove-file-btn" (click)="removeFile()" title="Remove file">
+                    &times;
+                  </button>
+                </div>
+              }
+            } @else {
+              <!-- Dropzone -->
+              <label class="file-dropzone">
+                <input
+                  #fileInput
+                  type="file"
+                  (change)="setFile($event)"
+                  accept=".pdf,image/png,image/jpeg,image/webp"
+                />
+                <span class="dropzone-icon">&#128194;</span>
+                <div class="dropzone-text">
+                  <strong>Click to select bilty image or PDF</strong>
+                  <span>Supports PNG, JPG, WebP, PDF &bull; Instant live preview</span>
+                </div>
+              </label>
+            }
+          </div>
+
+          <!-- Broadcast Summary & CTA -->
+          <div class="broadcast-summary">
+            <div class="summary-details">
+              <span class="summary-target">
+                @if (selectedCount() > 0) {
+                  Ready to broadcast to <strong>{{ selectedCount() }} recipient{{ selectedCount() === 1 ? '' : 's' }}</strong>
+                } @else {
+                  <span class="warning-text">&#9888; Please select at least one recipient</span>
+                }
+              </span>
+            </div>
+
+            <button
+              type="submit"
+              class="broadcast-btn"
+              [disabled]="isSending() || selectedCount() === 0"
+            >
+              @if (isSending()) {
+                <span class="spinner"></span>
+                <span>Broadcasting...</span>
+              } @else {
+                <span>&#10148; Send WhatsApp Broadcast</span>
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <!-- RIGHT: Live History & Delivery Log (38% width) -->
+    <section class="history-station">
+      <div class="history-station-header">
+        <div>
+          <h3>Dispatch History</h3>
+          <p>Recent audit log and delivery statuses</p>
+        </div>
+        <div class="history-header-badges">
+          @if (hasActiveHistoryFilters()) {
+            <span class="filter-count-badge">{{ activeHistoryFilterCount() }} filter{{ activeHistoryFilterCount() === 1 ? '' : 's' }} active</span>
+          }
+          <span class="history-count-badge">{{ history().length }} records</span>
+        </div>
+      </div>
+
+      <!-- Redesigned History Filters Console -->
+      <div class="history-filters-card">
+        <!-- Row 1: Search and Sender User -->
+        <div class="filter-row-primary">
+          <div class="filter-group filter-search-group">
+            <label for="history-search">Search log</label>
+            <div class="filter-input-wrap">
+              <span class="filter-icon">&#128269;</span>
+              <input
+                id="history-search"
+                type="search"
+                placeholder="Search message, recipient, 03..."
+                [value]="historySearch()"
+                (input)="setHistoryFilter('search', $any($event.target).value)"
+              />
+              @if (historySearch()) {
+                <button type="button" class="filter-clear-input-btn" (click)="setHistoryFilter('search', '')" title="Clear search">&times;</button>
+              }
+            </div>
+          </div>
+
+          <div class="filter-group filter-user-group">
+            <label for="history-user">Sender</label>
+            <div class="filter-input-wrap">
+              <span class="filter-icon">&#128100;</span>
+              <select
+                id="history-user"
+                [value]="historyUserId() ?? ''"
+                (change)="setHistoryFilter('user', $any($event.target).value)"
+              >
+                <option value="">All senders</option>
+                @for (user of historyUsers(); track user.id) {
+                  <option [value]="user.id">{{ user.username }}</option>
+                }
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Date & Time Range Grid (Side-by-side From & To blocks) -->
+        <div class="filter-range-grid">
+          <div class="range-block">
+            <div class="range-block-header">
+              <span class="range-bullet from-bullet"></span>
+              <span class="range-title">From</span>
+            </div>
+            <div class="range-fields">
+              <div class="range-subfield">
+                <span class="range-sublabel">Date</span>
+                <input
+                  type="date"
+                  [value]="historyFromDate()"
+                  (change)="setHistoryFilter('fromDate', $any($event.target).value)"
+                />
+              </div>
+              <div class="range-subfield">
+                <span class="range-sublabel">Time</span>
+                <input
+                  type="time"
+                  [value]="historyFromTime()"
+                  (change)="setHistoryFilter('fromTime', $any($event.target).value)"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="range-block">
+            <div class="range-block-header">
+              <span class="range-bullet to-bullet"></span>
+              <span class="range-title">To</span>
+            </div>
+            <div class="range-fields">
+              <div class="range-subfield">
+                <span class="range-sublabel">Date</span>
+                <input
+                  type="date"
+                  [value]="historyToDate()"
+                  (change)="setHistoryFilter('toDate', $any($event.target).value)"
+                />
+              </div>
+              <div class="range-subfield">
+                <span class="range-sublabel">Time</span>
+                <input
+                  type="time"
+                  [value]="historyToTime()"
+                  (change)="setHistoryFilter('toTime', $any($event.target).value)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Active Filter Status & Reset CTA Bar -->
+        @if (hasActiveHistoryFilters()) {
+          <div class="filter-status-bar">
+            <span class="filter-status-text">
+              Showing <strong>{{ history().length }}</strong> matching dispatch{{ history().length === 1 ? '' : 'es' }}
+            </span>
+            <button type="button" class="filter-reset-action" (click)="clearHistoryFilters()">
+              &times; Reset all filters
+            </button>
+          </div>
+        }
+      </div>
+
+      <div class="history-feed">
+        @for (record of history(); track record.id) {
+          <article class="history-card">
+            <div class="history-card-top">
+              <div class="history-id-block">
+                <strong>#{{ record.id }}</strong>
+                <span class="history-status-chip">{{ statusText(record) }}</span>
+              </div>
+              <span class="history-date">{{ record.timestamp || '-' }}</span>
+            </div>
+
+            @if (record.message_text) {
+              <p class="history-bubble">{{ record.message_text }}</p>
+            }
+
+            <div class="history-actions-row">
+              @if (record.file_path) {
+                @if (isImageFile(record.file_path)) {
+                  <button
+                    type="button"
+                    class="preview-pill-btn"
+                    (click)="previewHistoryFile(record)"
+                    [disabled]="isLoadingHistoryPreview() === record.id"
+                    title="Preview image"
+                  >
+                    @if (isLoadingHistoryPreview() === record.id) {
+                      <span class="spinner-micro"></span> Loading...
+                    } @else {
+                      &#128065; Preview image
+                    }
+                  </button>
+                }
+                <button type="button" class="download-pill-btn" (click)="downloadFile(record)">
+                  &#128190; Download file
+                </button>
+              }
+              <span class="sender-tag">By {{ record.sender?.username || 'unknown' }}</span>
+            </div>
+
+            <div class="recipient-pills-list">
+              @for (recipient of record.recipients; track recipient.id) {
+                <span
+                  class="recipient-pill"
+                  [class.sent]="recipient.delivery_status === 'sent'"
+                  [class.failed]="recipient.delivery_status !== 'sent'"
+                >
+                  {{ recipient.person?.full_name || 'Recipient' }}: {{ recipient.delivery_status }}
+                </span>
+              }
+            </div>
+          </article>
+        } @empty {
+          <div class="history-empty">
+            <span class="empty-icon">&#128237;</span>
+            <p>No dispatches sent yet.</p>
+            <small>Once you send a broadcast, delivery receipts will appear here.</small>
+          </div>
+        }
+      </div>
+    </section>
+  </div>
+
+  <!-- Lightbox Modal for Image Preview -->
+  @if (lightboxUrl(); as url) {
+    <div class="lightbox-overlay" (click)="closeLightbox()">
+      <div class="lightbox-dialog" (click)="$event.stopPropagation()">
+        <div class="lightbox-header">
+          <div class="lightbox-title-wrap">
+            <span class="lightbox-icon">&#128444;</span>
+            <strong>{{ lightboxTitle() || 'Image Preview' }}</strong>
+          </div>
+          <button type="button" class="lightbox-close-btn" (click)="closeLightbox()" title="Close preview (Esc)">
+            &times;
+          </button>
+        </div>
+        <div class="lightbox-body">
+          <img [src]="url" [alt]="lightboxTitle()" class="lightbox-image" />
+        </div>
+        <div class="lightbox-footer">
+          <a [href]="url" [download]="lightboxTitle() || 'bilty-image'" class="lightbox-download-btn">
+            &#128190; Download image
+          </a>
+          <button type="button" class="lightbox-dismiss-btn" (click)="closeLightbox()">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</section>

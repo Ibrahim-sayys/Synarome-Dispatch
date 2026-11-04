@@ -2,7 +2,19 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.schemas.marketing_person import MarketingPersonResponse
 from app.schemas.user import UserResponse
+
+
+class DispatchRecipientResponse(BaseModel):
+    id: int
+    person_id: int
+    delivery_status: str | None = None
+    person: MarketingPersonResponse | None = None
+
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class DispatchResponse(BaseModel):
@@ -12,7 +24,21 @@ class DispatchResponse(BaseModel):
     message_text: str | None = None
     timestamp: datetime | None = None
     sender: UserResponse | None = None
+    recipients: list[DispatchRecipientResponse] = []
 
     model_config = {
         "from_attributes": True
     }
+
+
+class DispatchStatsResponse(BaseModel):
+    total_dispatches: int
+    total_messages: int
+    messages_sent: int
+    messages_failed: int
+    today_dispatches: int
+    today_messages: int
+    total_contacts: int
+    active_contacts: int
+    delivery_rate: float
+    recent_dispatches: list[DispatchResponse] = []

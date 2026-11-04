@@ -16,7 +16,7 @@ def normalize_phone_number(phone_number: str) -> str:
         raise ValueError("Phone number can only include + at the start")
 
     digits = cleaned[1:] if cleaned.startswith("+") else cleaned
-    if not digits.isdigit() or not 10 <= len(digits) <= 15:
-        raise ValueError("Phone number must contain 10 to 15 digits")
+    if not digits.isdigit() or not 11 <= len(digits) <= 15:
+        raise ValueError("Phone number must contain 11 to 15 digits")
 
     return cleaned

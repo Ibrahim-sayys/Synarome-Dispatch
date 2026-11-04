@@ -5,7 +5,7 @@ from app.utils.validators import normalize_phone_number
 
 class MarketingPersonCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=150)
-    phone_number: str = Field(min_length=10, max_length=30)
+    phone_number: str = Field(min_length=11, max_length=30)
     is_active: bool = True
 
     @field_validator("phone_number")
@@ -21,7 +21,7 @@ class MarketingPersonCreate(BaseModel):
 
 class MarketingPersonUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=150)
-    phone_number: str | None = Field(default=None, min_length=10, max_length=30)
+    phone_number: str | None = Field(default=None, min_length=11, max_length=30)
     is_active: bool | None = None
 
     @field_validator("phone_number")

@@ -14,3 +14,4 @@ class Dispatch(Base):
     message_text = Column(Text, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     sender = relationship("User")
+    recipients = relationship("DispatchRecipient", back_populates="dispatch")

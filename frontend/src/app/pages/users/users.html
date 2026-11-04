@@ -9,13 +9,24 @@
   <form [formGroup]="userForm" (ngSubmit)="createUser()" class="management-form">
     <label>
       Username
-      <input type="text" formControlName="username" autocomplete="off" />
+      <input type="text" placeholder="e.g. staff_user" formControlName="username" autocomplete="off" />
     </label>
 
-    <label>
-      Password
-      <input type="password" formControlName="password" autocomplete="new-password" />
-    </label>
+    <div class="field-with-strength">
+      <label>
+        Password
+        <input type="password" placeholder="Min. 8 characters" formControlName="password" autocomplete="new-password" />
+      </label>
+      @if (createUserPassword) {
+        @let strength = getPasswordStrength(createUserPassword);
+        <div class="password-strength-container inline-strength">
+          <div class="strength-track">
+            <div class="strength-bar" [class]="strength.class" [style.width]="strength.width"></div>
+          </div>
+          <span class="strength-tag" [class]="strength.class">{{ strength.label }}</span>
+        </div>
+      }
+    </div>
 
     <label>
       Role
@@ -76,8 +87,21 @@
 
       <label>
         New password
-        <input type="password" formControlName="password" autocomplete="new-password" />
+        <input type="password" placeholder="Enter new password (min. 8 characters)" formControlName="password" autocomplete="new-password" />
       </label>
+
+      @if (resetUserPassword) {
+        @let strength = getPasswordStrength(resetUserPassword);
+        <div class="password-strength-container">
+          <div class="strength-track">
+            <div class="strength-bar" [class]="strength.class" [style.width]="strength.width"></div>
+          </div>
+          <div class="strength-meta">
+            <span class="strength-tag" [class]="strength.class">{{ strength.label }}</span>
+            <span class="strength-hint">Use 8+ chars with uppercase, numbers & symbols</span>
+          </div>
+        </div>
+      }
 
       <div class="modal-actions">
         <button type="button" class="secondary" (click)="closeResetDialog()">Cancel</button>

@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, HostListener, computed, inject } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/auth.service';
@@ -36,8 +36,45 @@ export class App {
     this.applyTheme();
   }
 
-  protected toggleAccountMenu(): void {
+  @HostListener('document:click', ['$event'])
+  protected onDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (this.isAccountMenuOpen && !target.closest('.account-menu')) {
+      this.isAccountMenuOpen = false;
+    }
+  }
+
+  protected toggleAccountMenu(event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+    }
     this.isAccountMenuOpen = !this.isAccountMenuOpen;
+  }
+
+  protected get newPasswordValue(): string {
+    return this.passwordForm.get('newPassword')?.value || '';
+  }
+
+  protected getPasswordStrength(password: string): { label: string; class: string; width: string } {
+    if (!password) {
+      return { label: '', class: '', width: '0%' };
+    }
+    let score = 0;
+    if (password.length >= 8) score++;
+    if (password.length >= 10) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    if (score <= 1) {
+      return { label: 'Weak', class: 'weak', width: '25%' };
+    } else if (score === 2) {
+      return { label: 'Fair', class: 'fair', width: '50%' };
+    } else if (score === 3 || score === 4) {
+      return { label: 'Good', class: 'good', width: '75%' };
+    } else {
+      return { label: 'Strong', class: 'strong', width: '100%' };
+    }
   }
 
   protected openPasswordDialog(): void {

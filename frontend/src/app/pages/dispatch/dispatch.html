@@ -1,0 +1,150 @@
+<section class="dispatch-page">
+  <div class="chat-window">
+    @if (stage() === 'contacts') {
+      <header class="chat-header">
+        <div class="chat-identity">
+          <div class="chat-avatar" aria-hidden="true">+</div>
+          <div>
+            <h2>Select recipients</h2>
+            <span>{{ selectedCount() }} selected</span>
+          </div>
+        </div>
+        <a routerLink="/dispatch/history" class="history-link">History</a>
+      </header>
+
+      <div class="recipient-stage">
+        <div class="recipient-toolbar">
+          <input type="search" placeholder="Search contacts" aria-label="Search contacts" [value]="contactSearch()" (input)="contactSearch.set($any($event.target).value)" />
+          <button type="button" (click)="selectAllContacts()" [disabled]="allContactsSelected()">Select all</button>
+          @if (selectedCount()) {
+            <button type="button" (click)="clearRecipients()">Clear</button>
+          }
+        </div>
+
+        @if (contactsError()) {
+          <div class="recipient-empty" role="alert">
+            <p>{{ contactsError() }}</p>
+            <button type="button" (click)="loadContacts()">Try again</button>
+          </div>
+        } @else if (isLoadingContacts()) {
+          <p class="recipient-empty">Loading contacts...</p>
+        } @else {
+          <div class="recipient-grid">
+            @for (contact of filteredContacts(); track contact.id) {
+              <label class="recipient-card" [class.selected]="selectedRecipientIds().has(contact.id)">
+                <input type="checkbox" [checked]="selectedRecipientIds().has(contact.id)" (change)="toggleRecipient(contact.id, $any($event.target).checked)" />
+                <span class="recipient-avatar" aria-hidden="true">{{ contact.full_name.charAt(0).toUpperCase() }}</span>
+                <span class="recipient-details"><strong>{{ contact.full_name }}</strong><small>{{ contact.phone_number }}</small></span>
+              </label>
+            } @empty {
+              <p class="recipient-empty">No contacts found.</p>
+            }
+          </div>
+        }
+      </div>
+
+      <footer class="recipient-footer">
+        <span>Test mode: the message is sent once to the configured test recipient.</span>
+        <button type="button" class="continue-button" [disabled]="!selectedCount()" (click)="continueToMessage()">Continue to message &#8594;</button>
+      </footer>
+    } @else {
+      <header class="chat-header">
+        <div class="chat-identity">
+          <button type="button" class="back-button" aria-label="Back to recipients" title="Back to recipients" (click)="backToContacts()" [disabled]="isSending()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6"/></svg>
+          </button>
+          <div class="chat-avatar" aria-hidden="true">{{ selectedCount() }}</div>
+          <div>
+            <h2>{{ selectedCount() === 1 ? selectedContacts()[0]?.full_name : selectedCount() + ' recipients' }}</h2>
+            <span>Test mode · sends once to the configured recipient</span>
+          </div>
+        </div>
+        <a routerLink="/dispatch/history" class="history-link">History</a>
+      </header>
+
+      @if (selectedCount() > 1) {
+        <div class="selected-strip" aria-label="Selected contacts">
+          @for (contact of selectedContacts(); track contact.id) {
+            <span>{{ contact.full_name }}</span>
+          }
+        </div>
+      }
+
+      <div class="chat-thread" #chatThread>
+        @for (chat of sessionMessages(); track chat.messageId) {
+          <article class="outgoing-message" [title]="'History #' + chat.recordId + ' · Meta message ID: ' + chat.messageId">
+            @if (chat.attachmentUrl && chat.isImage) {
+              <button type="button" class="chat-image-button" (click)="enlargedImage.set({ url: chat.attachmentUrl!, name: chat.attachmentName || 'Image' })" [attr.aria-label]="'Open ' + chat.attachmentName">
+                <img [src]="chat.attachmentUrl" [alt]="chat.attachmentName || 'Sent image'" />
+              </button>
+            } @else if (chat.attachmentUrl) {
+              <a class="chat-document" [href]="chat.attachmentUrl" [download]="chat.attachmentName || 'document.pdf'">&#128196; {{ chat.attachmentName }}</a>
+            }
+            @if (chat.text) {
+              <p>{{ chat.text }}</p>
+            }
+            <div class="message-meta"><span>Accepted</span><time>{{ chat.time | date:'shortTime' }}</time></div>
+          </article>
+        } @empty {
+          <div class="chat-empty">Start a test message</div>
+        }
+      </div>
+
+      <form class="chat-composer" [formGroup]="dispatchForm" (ngSubmit)="sendMessage()">
+        @if (error()) {
+          <p class="send-error" role="alert">{{ error() }}</p>
+        }
+
+        @if (selectedFile(); as file) {
+          <div class="attachment-preview">
+            @if (selectedFileIsImage() && selectedAttachmentUrl()) {
+              <img [src]="selectedAttachmentUrl()" [alt]="file.name" />
+            } @else {
+              <span class="pdf-icon" aria-hidden="true">&#128196;</span>
+            }
+            <div class="attachment-details">
+              <strong [title]="file.name">{{ file.name }}</strong>
+              <small>{{ formatFileSize(file.size) }}</small>
+            </div>
+            <button type="button" class="remove-attachment" (click)="removeFile()" [disabled]="isSending()" aria-label="Remove attachment">&times;</button>
+          </div>
+        }
+
+        <div class="composer-row">
+          <input #attachmentInput class="file-input" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="setFile($event)" [disabled]="isSending()" />
+          <button type="button" class="attach-button" title="Attach JPG, PNG, or PDF" aria-label="Attach file" (click)="attachmentInput.click()" [disabled]="isSending()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 11.5-8.8 8.8a6 6 0 0 1-8.5-8.5l9.3-9.3a4 4 0 0 1 5.7 5.7L8.9 17.5a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+          </button>
+          <div class="message-input-shell">
+            <textarea
+              #messageInput
+              formControlName="message_text"
+              [attr.maxlength]="selectedFile() ? 1024 : 4096"
+              [readonly]="isSending()"
+              (keydown.enter)="handleEnter($event)"
+              (input)="resizeMessageInput(messageInput)"
+              rows="1"
+              placeholder="Message"
+              aria-label="WhatsApp message"
+            ></textarea>
+          </div>
+          <button type="submit" class="send-button" [disabled]="isSending() || (!dispatchForm.getRawValue().message_text.trim() && !selectedFile())" [attr.aria-label]="isSending() ? 'Sending' : 'Send message'">
+            {{ isSending() ? '...' : '➤' }}
+          </button>
+        </div>
+      </form>
+    }
+  </div>
+
+  @if (enlargedImage(); as image) {
+    <div class="image-overlay" (click)="enlargedImage.set(null)">
+      <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="image.name" (click)="$event.stopPropagation()">
+        <div class="image-dialog-header">
+          <strong>{{ image.name }}</strong>
+          <button type="button" (click)="enlargedImage.set(null)" aria-label="Close image">&times;</button>
+        </div>
+        <img [src]="image.url" [alt]="image.name" />
+      </div>
+    </div>
+  }
+</section>

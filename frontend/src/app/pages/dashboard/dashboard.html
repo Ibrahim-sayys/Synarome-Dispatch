@@ -1,33 +1,184 @@
 <section class="dashboard">
-  <div class="panel">
-    <h2>System foundation</h2>
-    <p>Signed in as {{ currentUser()?.username }} with {{ currentUser()?.role }} access.</p>
+  <div class="welcome-banner">
+    <div class="welcome-content">
+      <h2>Dashboard</h2>
+      <p>Dispatch activity and WhatsApp message submissions.</p>
+    </div>
+    <div class="banner-actions">
+      <button type="button" class="refresh-btn" (click)="loadStats()" title="Refresh statistics">
+        &#x21bb; Refresh
+      </button>
+      <a routerLink="/dispatch" class="primary-btn">
+        + Send Dispatch
+      </a>
+    </div>
   </div>
 
-  <div class="status-grid">
-    <article>
-      <span>Frontend</span>
-      <strong>Angular SPA</strong>
-      <p>Login, users, and contacts screens are wired through authenticated routes.</p>
+  <!-- KPI Stat Cards -->
+  <div class="stats-grid">
+    <!-- Card 1: Today's Messages -->
+    <article class="stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Messages Today</span>
+        <span class="stat-badge highlight">Today</span>
+      </div>
+      <div class="stat-body">
+        <strong class="stat-value">{{ stats()?.today_messages ?? 0 }}</strong>
+        <p class="stat-meta">
+          Across <strong>{{ stats()?.today_dispatches ?? 0 }}</strong> dispatch {{ (stats()?.today_dispatches === 1) ? 'batch' : 'batches' }}
+        </p>
+      </div>
+      <div class="stat-footer-bar today-bar"></div>
     </article>
 
-    <article>
-      <span>Backend</span>
-      <strong>{{ apiStatus() }}</strong>
-      <p>{{ apiStatusDetail() }}</p>
+    <!-- Card 2: Total Messages Delivered -->
+    <article class="stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Messages Accepted</span>
+        <span class="stat-badge success">{{ stats()?.delivery_rate ?? 100 }}% Rate</span>
+      </div>
+      <div class="stat-body">
+        <strong class="stat-value">{{ stats()?.messages_sent ?? 0 }}</strong>
+        <p class="stat-meta">
+          Out of <strong>{{ stats()?.total_messages ?? 0 }}</strong> total submissions
+        </p>
+      </div>
+      <div class="stat-footer-bar success-bar"></div>
     </article>
 
-    <article>
-      <span>Database</span>
-      <strong>PostgreSQL</strong>
-      <p>User and marketing person data is managed through SQLAlchemy models.</p>
+    <!-- Card 3: Total Dispatches -->
+    <article class="stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Total Dispatches</span>
+        <span class="stat-badge neutral">All Time</span>
+      </div>
+      <div class="stat-body">
+        <strong class="stat-value">{{ stats()?.total_dispatches ?? 0 }}</strong>
+        <p class="stat-meta">
+          Failed messages: <strong>{{ stats()?.messages_failed ?? 0 }}</strong>
+        </p>
+      </div>
+      <div class="stat-footer-bar primary-bar"></div>
+    </article>
+
+    <!-- Card 4: Directory Reach -->
+    <article class="stat-card">
+      <div class="stat-header">
+        <span class="stat-label">Contact Directory</span>
+        <span class="stat-badge neutral">{{ stats()?.active_contacts ?? 0 }} Active</span>
+      </div>
+      <div class="stat-body">
+        <strong class="stat-value">{{ stats()?.total_contacts ?? 0 }}</strong>
+        <p class="stat-meta">
+          Marketing recipients registered in system
+        </p>
+      </div>
+      <div class="stat-footer-bar contacts-bar"></div>
     </article>
   </div>
 
-  <div class="workflow-grid">
-    @if (canManageUsers()) {
-      <a routerLink="/users">Manage users</a>
-    }
-    <a routerLink="/contacts">Open contact directory</a>
+  <!-- Delivery Rate Breakdown Bar -->
+  @if (stats(); as s) {
+    <div class="delivery-progress-card">
+      <div class="progress-info">
+        <div>
+          <h4>Submission Overview</h4>
+          <p>{{ s.messages_sent }} accepted &bull; {{ s.messages_failed }} failed or unconfigured</p>
+        </div>
+        <div class="rate-indicator">
+          <strong>{{ s.delivery_rate }}%</strong>
+          <span>Acceptance Rate</span>
+        </div>
+      </div>
+      <div class="progress-track">
+        <div
+          class="progress-fill"
+          [style.width.%]="s.delivery_rate"
+          [class.high]="s.delivery_rate >= 90"
+          [class.medium]="s.delivery_rate >= 70 && s.delivery_rate < 90"
+          [class.low]="s.delivery_rate < 70"
+        ></div>
+      </div>
+    </div>
+  }
+
+  <!-- Recent Dispatches & Shortcuts -->
+  <div class="dashboard-split">
+    <!-- Recent Dispatches Activity -->
+    <section class="activity-panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Recent Activity</p>
+          <h3>Latest Dispatches</h3>
+        </div>
+        <a routerLink="/dispatch/history" class="view-all-link">View all &rarr;</a>
+      </div>
+
+      <div class="recent-list">
+        @if (isLoadingStats()) {
+          <p class="loading-state">Loading dispatch activity...</p>
+        } @else {
+          @for (record of stats()?.recent_dispatches; track record.id) {
+            <a class="recent-item" routerLink="/dispatch/history" [queryParams]="{ dispatch_id: record.id }" [attr.aria-label]="'Open dispatch ' + record.id + ' in history'">
+              <div class="recent-item-main">
+                <div class="recent-title">
+                  <strong>#{{ record.id }}</strong>
+                  <span class="recipient-count">{{ record.send_mode === 'whatsapp_test' ? 'Test send' : record.recipients.length + ' recipients' }}</span>
+                  <span class="status-chip" [class]="getStatusBadgeClass(record)">
+                    {{ getStatusLabel(record) }}
+                  </span>
+                </div>
+                @if (record.message_text) {
+                  <p class="recent-snippet">{{ record.message_text }}</p>
+                }
+                @if (record.file_path) {
+                  <span class="file-chip">&#128206; Has Attachment</span>
+                }
+              </div>
+              <div class="recent-meta">
+                <span class="time">{{ record.timestamp || '-' }}</span>
+                <span class="sender">By {{ record.sender?.username || 'Unknown' }}</span>
+              </div>
+            </a>
+          } @empty {
+            <p class="empty-state">No dispatches sent yet. Start by sending your first WhatsApp update.</p>
+          }
+        }
+      </div>
+    </section>
+
+    <!-- Quick Navigation -->
+    <aside class="side-panel">
+      <!-- Quick Shortcuts -->
+      <div class="shortcuts-card">
+        <h4>Quick Shortcuts</h4>
+        <div class="shortcut-links">
+          <a routerLink="/dispatch" class="shortcut-item">
+            <span class="shortcut-icon">&#128232;</span>
+            <div>
+              <strong>Send Dispatch</strong>
+              <p>Dispatch bilty files & WhatsApp messages</p>
+            </div>
+          </a>
+          <a routerLink="/contacts" class="shortcut-item">
+            <span class="shortcut-icon">&#128101;</span>
+            <div>
+              <strong>Manage Contacts</strong>
+              <p>Browse & add marketing persons</p>
+            </div>
+          </a>
+          @if (canManageUsers()) {
+            <a routerLink="/users" class="shortcut-item">
+              <span class="shortcut-icon">&#128273;</span>
+              <div>
+                <strong>User Management</strong>
+                <p>Manage accounts and reset credentials</p>
+              </div>
+            </a>
+          }
+        </div>
+      </div>
+
+    </aside>
   </div>
 </section>

@@ -1,4 +1,5 @@
 from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -10,3 +11,6 @@ class DispatchRecipient(Base):
     dispatch_id = Column(Integer, ForeignKey("dispatches.id"), nullable=False)
     person_id = Column(Integer, ForeignKey("marketing_persons.id"), nullable=False)
     delivery_status = Column(String(50), default="pending")
+
+    dispatch = relationship("Dispatch", back_populates="recipients")
+    person = relationship("MarketingPerson")

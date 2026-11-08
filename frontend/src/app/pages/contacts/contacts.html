@@ -6,19 +6,23 @@
     </div>
     <label class="search">
       Search
-      <input type="search" [value]="searchTerm()" (input)="search($any($event.target).value)" />
+      <input type="search" placeholder="Search contacts..." [value]="searchTerm()" (input)="search($any($event.target).value)" />
     </label>
   </div>
+
+  @if (message()) {
+    <p class="message" [class.error-message]="isErrorMessage()" [attr.role]="isErrorMessage() ? 'alert' : 'status'">{{ message() }}</p>
+  }
 
   <form [formGroup]="contactForm" (ngSubmit)="saveContact()" class="contact-form">
     <label>
       Full name
-      <input type="text" formControlName="full_name" autocomplete="off" />
+      <input type="text" placeholder="e.g. Muhammad Usman" formControlName="full_name" autocomplete="off" />
     </label>
 
     <label>
       Phone number
-      <input type="tel" formControlName="phone_number" autocomplete="off" />
+      <input type="tel" placeholder="03xxxxxxxx" formControlName="phone_number" autocomplete="off" />
     </label>
 
     <button type="submit" [disabled]="contactForm.invalid || isSaving()">
@@ -26,25 +30,31 @@
     </button>
   </form>
 
-  @if (message()) {
-    <p class="message" [class.error-message]="isErrorMessage()">{{ message() }}</p>
-  }
-
   <div class="contact-list">
     @for (contact of filteredContacts(); track contact.id) {
-      <article>
+      <article class="contact-card" (click)="openContactHistory(contact)" tabindex="0" (keydown.enter)="openContactHistory(contact)">
         <div>
           <strong>{{ contact.full_name }}</strong>
           <p>{{ contact.phone_number }}</p>
+          <small class="contact-hint">Click to view messages</small>
         </div>
         <span [class.inactive]="!contact.is_active">{{ contact.is_active ? 'Active' : 'Inactive' }}</span>
         <p class="suspended-by">
           {{ contact.is_active ? '' : 'Suspended by ' + (contact.suspended_by_username || 'unknown') }}
         </p>
-        <div class="actions">
-          <button type="button" class="icon-button" aria-label="Edit contact" title="Edit contact" (click)="editContact(contact)">
-            &#9998;
+        <div class="actions" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()">
+          <button type="button" class="icon-button" [attr.aria-label]="'More actions for ' + contact.full_name" [attr.aria-expanded]="openMenuId() === contact.id" aria-haspopup="menu" (click)="toggleMenu(contact.id)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
           </button>
+          <button type="button" class="icon-button delete-icon-button" [attr.aria-label]="'Delete ' + contact.full_name" [title]="'Delete ' + contact.full_name" (click)="openDeleteDialog(contact)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6"/></svg>
+          </button>
+          @if (openMenuId() === contact.id) {
+            <div class="contact-menu" role="menu" [attr.aria-label]="'Actions for ' + contact.full_name">
+              <button type="button" role="menuitem" (click)="editContact(contact)">Edit contact</button>
+              <button type="button" role="menuitem" [disabled]="isSaving()" (click)="setSuspendedStatus(contact)">{{ contact.is_active ? 'Suspend contact' : 'Unsuspend contact' }}</button>
+            </div>
+          }
         </div>
       </article>
     }
@@ -61,23 +71,114 @@
 
       <label>
         Full name
-        <input type="text" formControlName="full_name" autocomplete="off" />
+        <input type="text" placeholder="e.g. Muhammad Usman" formControlName="full_name" autocomplete="off" />
       </label>
 
       <label>
         Phone number
-        <input type="tel" formControlName="phone_number" autocomplete="off" />
+        <input type="tel" placeholder="03xxxxxxxx" formControlName="phone_number" autocomplete="off" />
       </label>
 
       <div class="modal-actions">
-        @if (editingContact()?.is_active) {
-          <button type="button" class="danger" [disabled]="isSaving()" (click)="setSuspendedStatus(true)">Suspend</button>
-        } @else {
-          <button type="button" class="success" [disabled]="isSaving()" (click)="setSuspendedStatus(false)">Unsuspend</button>
-        }
         <button type="button" class="secondary" (click)="closeEditDialog()">Cancel</button>
         <button type="submit" [disabled]="editForm.invalid || isSaving()">Save changes</button>
       </div>
     </form>
+  </div>
+}
+
+@if (deleteTarget(); as contact) {
+  <div class="modal-backdrop" (click)="closeDeleteDialog()">
+    <section class="edit-modal delete-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Delete ' + contact.full_name" (click)="$event.stopPropagation()">
+      <div>
+        <p class="eyebrow">Delete contact</p>
+        <h2>{{ contact.full_name }}</h2>
+        <p class="delete-copy">Remove this contact from the directory? Saved message history will remain.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" [disabled]="isDeleting()" (click)="closeDeleteDialog()">Cancel</button>
+        <button type="button" class="danger" [disabled]="isDeleting()" (click)="deleteContact()">{{ isDeleting() ? 'Deleting...' : 'Delete contact' }}</button>
+      </div>
+    </section>
+  </div>
+}
+
+@if (selectedContact(); as contact) {
+  <div class="modal-backdrop" (click)="closeContactHistory()">
+    <section class="history-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Messages sent to ' + contact.full_name" (click)="$event.stopPropagation()">
+      <div class="history-modal-header">
+        <div class="history-contact-identity">
+          <div class="history-contact-avatar" aria-hidden="true">{{ getInitials(contact.full_name) }}</div>
+          <div>
+            <p class="eyebrow">Successful dispatch messages</p>
+            <h2>{{ contact.full_name }}</h2>
+            <p class="modal-copy">{{ contact.phone_number }} · {{ contactHistory().length }} message{{ contactHistory().length === 1 ? '' : 's' }}</p>
+          </div>
+        </div>
+        <button type="button" class="secondary close-button" (click)="closeContactHistory()" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="conversation-thread" #conversationThread>
+        @if (historyError()) {
+          <p class="history-error" role="alert">{{ historyError() }}</p>
+        }
+        @if (isLoadingContactHistory()) {
+          <p class="history-loading">Loading messages...</p>
+        } @else {
+          @for (entry of conversation(); track entry.record.id) {
+            @if (entry.showDate) {
+              <div class="conversation-date">{{ entry.timestamp ? (entry.timestamp | date:'EEEE, d MMM y') : 'Date unavailable' }}</div>
+            }
+            <div class="conversation-row">
+              <article class="message-bubble" [class.message-failed]="contactStatus(entry.record, contact.id) === 'Failed'">
+                <div class="message-sender">{{ entry.record.sender?.username || 'Unknown sender' }}</div>
+                @if (entry.record.send_mode === 'whatsapp_test') {
+                  <div class="test-destination">Demo selection · Actual send to {{ entry.record.actual_recipient }}</div>
+                }
+
+                @if (isImage(entry.record)) {
+                  @if (previewUrls()[entry.record.id]; as imageUrl) {
+                    <button type="button" class="message-image-button" (click)="openImage(entry.record)" [attr.aria-label]="'Open image from dispatch ' + entry.record.id">
+                      <img class="message-image" [src]="imageUrl" [alt]="'Image sent in dispatch ' + entry.record.id" />
+                    </button>
+                  } @else {
+                    <div class="image-placeholder">{{ previewErrors().has(entry.record.id) ? 'Image unavailable' : 'Loading image...' }}</div>
+                  }
+                } @else if (entry.record.file_path) {
+                  <button type="button" class="message-document" (click)="downloadAttachment(entry.record)">
+                    <span class="document-icon" aria-hidden="true">&#128196;</span>
+                    <span class="document-label">{{ entry.record.original_filename || (isPdf(entry.record) ? 'Bilty PDF' : 'Attachment') }}<small>Click to download</small></span>
+                    <span class="document-download" aria-hidden="true">&#8595;</span>
+                  </button>
+                }
+
+                @if (entry.record.message_text) {
+                  <p class="message-text">{{ entry.record.message_text }}</p>
+                }
+
+                <div class="message-footer">
+                  <span class="message-status">{{ contactStatus(entry.record, contact.id) }}</span>
+                  <time>{{ entry.timestamp ? (entry.timestamp | date:'d MMM y, h:mm a') : 'Time unavailable' }}</time>
+                </div>
+              </article>
+            </div>
+          } @empty {
+            <div class="history-empty-state">No successful dispatch messages for this contact yet.</div>
+          }
+        }
+      </div>
+    </section>
+  </div>
+}
+
+@if (expandedImage(); as image) {
+  <div class="image-expanded-backdrop" (click)="expandedImage.set(null)">
+    <div class="image-expanded-dialog" role="dialog" aria-modal="true" [attr.aria-label]="image.label" (click)="$event.stopPropagation()">
+      <div class="image-expanded-header">
+        <strong>{{ image.label }}</strong>
+        <button type="button" class="secondary close-button" (click)="expandedImage.set(null)" aria-label="Close image">&times;</button>
+      </div>
+      <img [src]="image.url" [alt]="image.label" />
+    </div>
   </div>
 }

@@ -28,4 +28,8 @@ export class UsersService {
   resetPassword(userId: number, password: string): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(`${this.baseUrl}/${userId}/reset-password`, { password });
   }
+
+  deleteUser(userId: number): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.baseUrl}/${userId}`);
+  }
 }

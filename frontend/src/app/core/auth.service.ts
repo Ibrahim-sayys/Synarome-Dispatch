@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable, catchError, finalize, of, tap } from 'rxjs';
 import { environment } from '../../environments/environment';
 
@@ -28,14 +29,20 @@ const userStorageKey = 'synarome_user';
 })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly router = inject(Router);
   private readonly token = signal<string | null>(localStorage.getItem(tokenStorageKey));
   private readonly user = signal<AuthUser | null>(this.getStoredUser());
+  private expirationTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly currentUser = this.user.asReadonly();
   readonly isAuthenticated = computed(() => {
     const token = this.token();
     return token !== null && !this.isTokenExpired(token);
   });
+
+  constructor() {
+    this.scheduleExpirationCheck();
+  }
 
   login(username: string, password: string): Observable<LoginResponse> {
     return this.http
@@ -49,6 +56,7 @@ export class AuthService {
           this.user.set(response.user);
           localStorage.setItem(tokenStorageKey, response.access_token);
           localStorage.setItem(userStorageKey, JSON.stringify(response.user));
+          this.scheduleExpirationCheck();
         }),
       );
   }
@@ -67,22 +75,60 @@ export class AuthService {
     );
   }
 
-  logout(): void {
+  logout(redirectReason?: string): void {
+    if (this.expirationTimer) {
+      clearTimeout(this.expirationTimer);
+      this.expirationTimer = null;
+    }
     this.token.set(null);
     this.user.set(null);
     localStorage.removeItem(tokenStorageKey);
     localStorage.removeItem(userStorageKey);
     sessionStorage.clear();
+
+    if (redirectReason === 'expired') {
+      this.router.navigate(['/login'], {
+        queryParams: { sessionExpired: 'true' },
+      });
+    }
   }
 
   getAccessToken(): string | null {
     const token = this.token();
     if (!token || this.isTokenExpired(token)) {
-      this.logout();
+      this.logout('expired');
       return null;
     }
 
     return token;
+  }
+
+  private scheduleExpirationCheck(): void {
+    if (this.expirationTimer) {
+      clearTimeout(this.expirationTimer);
+      this.expirationTimer = null;
+    }
+
+    const token = this.token();
+    if (!token) {
+      return;
+    }
+
+    const payload = this.decodeJwtPayload(token);
+    if (!payload?.exp) {
+      this.logout('expired');
+      return;
+    }
+
+    const msUntilExpiry = payload.exp * 1000 - Date.now();
+    if (msUntilExpiry <= 0) {
+      this.logout('expired');
+      return;
+    }
+
+    this.expirationTimer = setTimeout(() => {
+      this.logout('expired');
+    }, msUntilExpiry);
   }
 
   private isTokenExpired(token: string): boolean {

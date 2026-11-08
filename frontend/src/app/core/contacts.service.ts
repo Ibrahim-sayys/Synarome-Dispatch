@@ -44,7 +44,7 @@ export class ContactsService {
     return this.http.put<MarketingPerson>(`${this.baseUrl}/${id}`, payload);
   }
 
-  deactivateContact(id: number): Observable<MarketingPerson> {
+  deleteContact(id: number): Observable<MarketingPerson> {
     return this.http.delete<MarketingPerson>(`${this.baseUrl}/${id}`);
   }
 }

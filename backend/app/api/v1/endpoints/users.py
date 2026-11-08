@@ -17,7 +17,7 @@ def list_users(
 ):
     require_roles(current_user, [UserRole.SUPER_ADMIN, UserRole.MANAGER])
 
-    return db.query(User).order_by(User.created_at.desc(), User.id.desc()).all()
+    return db.query(User).filter(User.is_active.is_(True)).order_by(User.created_at.desc(), User.id.desc()).all()
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -63,7 +63,7 @@ def reset_user_password(
     require_roles(current_user, [UserRole.SUPER_ADMIN, UserRole.MANAGER])
 
     user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
@@ -86,3 +86,24 @@ def reset_user_password(
     db.commit()
 
     return {"message": "Password reset."}
+
+
+@router.delete("/{user_id}")
+def delete_user(
+    user_id: int,
+    current_user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    require_roles(current_user, [UserRole.SUPER_ADMIN, UserRole.MANAGER])
+    user = db.get(User, user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own account")
+    if not can_manage_user_role(current_user.role, user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You cannot delete this user")
+
+    user.is_active = False
+    user.session_version += 1
+    db.commit()
+    return {"message": "User deleted."}

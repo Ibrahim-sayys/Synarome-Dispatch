@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="210" viewBox="0 0 210 210">
+  <g fill="none" stroke="#729b89" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" opacity=".27">
+    <path d="M24 26h31a9 9 0 0 1 9 9v16a9 9 0 0 1-9 9H41l-9 7v-7h-8a9 9 0 0 1-9-9V35a9 9 0 0 1 9-9Z"/>
+    <path d="M26 38h27m-27 9h18"/>
+    <path d="M143 17h25a7 7 0 0 1 7 7v19a7 7 0 0 1-7 7h-10l-7 6v-6h-8a7 7 0 0 1-7-7V24a7 7 0 0 1 7-7Z"/>
+    <path d="m146 32 5 5 12-12"/>
+    <rect x="79" y="85" width="34" height="27" rx="5"/>
+    <circle cx="96" cy="98" r="7"/>
+    <path d="M86 85l3-5h14l3 5"/>
+    <path d="M163 89c-7-7-18-7-25 0s-7 18 0 25l19 19 19-19c7-7 7-18 0-25s-18-7-25 0l-7 7"/>
+    <path d="M21 137h42v29H21zM21 137l21 17 21-17"/>
+    <path d="M91 166c-4-4-4-10 0-14l22-22c3-3 8-3 11 0s3 8 0 11l-22 22c-2 2-5 2-7 0s-2-5 0-7l19-19"/>
+    <path d="M164 164h24m-12-12v24"/>
+    <circle cx="36" cy="99" r="3"/><circle cx="186" cy="61" r="2"/><circle cx="71" cy="191" r="2"/>
+    <path d="m122 20 2 5 5 2-5 2-2 5-2-5-5-2 5-2Zm20 166 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z"/>
+  </g>
+</svg>

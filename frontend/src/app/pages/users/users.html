@@ -6,16 +6,31 @@
     </div>
   </div>
 
+  @if (message()) {
+    <p class="message" [class.error-message]="isErrorMessage()" [attr.role]="isErrorMessage() ? 'alert' : 'status'">{{ message() }}</p>
+  }
+
   <form [formGroup]="userForm" (ngSubmit)="createUser()" class="management-form">
     <label>
       Username
-      <input type="text" formControlName="username" autocomplete="off" />
+      <input type="text" placeholder="e.g. staff_user" formControlName="username" autocomplete="off" />
     </label>
 
-    <label>
-      Password
-      <input type="password" formControlName="password" autocomplete="new-password" />
-    </label>
+    <div class="field-with-strength">
+      <label>
+        Password
+        <input type="password" placeholder="Min. 8 characters" formControlName="password" autocomplete="new-password" />
+      </label>
+      @if (createUserPassword) {
+        @let strength = getPasswordStrength(createUserPassword);
+        <div class="password-strength-container inline-strength">
+          <div class="strength-track">
+            <div class="strength-bar" [class]="strength.class" [style.width]="strength.width"></div>
+          </div>
+          <span class="strength-tag" [class]="strength.class">{{ strength.label }}</span>
+        </div>
+      }
+    </div>
 
     <label>
       Role
@@ -30,10 +45,6 @@
       {{ isSaving() ? 'Creating...' : 'Create user' }}
     </button>
   </form>
-
-  @if (message()) {
-    <p class="message" [class.error-message]="isErrorMessage()">{{ message() }}</p>
-  }
 
   <div class="table-wrap">
     <table>
@@ -53,7 +64,10 @@
             <td>{{ user.created_at || '-' }}</td>
             <td>
               @if (canResetPassword(user)) {
-                <button type="button" class="secondary" (click)="openResetDialog(user)">Reset password</button>
+                <div class="user-actions">
+                  <button type="button" class="secondary" (click)="openResetDialog(user)">Reset password</button>
+                  <button type="button" class="danger-outline" (click)="openDeleteDialog(user)">Delete</button>
+                </div>
               } @else {
                 <span class="muted">-</span>
               }
@@ -76,8 +90,19 @@
 
       <label>
         New password
-        <input type="password" formControlName="password" autocomplete="new-password" />
+        <input type="password" placeholder="Enter new password (min. 8 characters)" formControlName="password" autocomplete="new-password" />
       </label>
+
+      @let strength = getPasswordStrength(resetUserPassword);
+      <div class="password-strength-container" [class.strength-hidden]="!resetUserPassword">
+        <div class="strength-track">
+          <div class="strength-bar" [class]="strength.class" [style.width]="strength.width"></div>
+        </div>
+        <div class="strength-meta">
+          <span class="strength-tag" [class]="strength.class">{{ strength.label }}</span>
+          <span class="strength-hint">Use 8+ chars with uppercase, numbers & symbols</span>
+        </div>
+      </div>
 
       <div class="modal-actions">
         <button type="button" class="secondary" (click)="closeResetDialog()">Cancel</button>
@@ -86,5 +111,21 @@
         </button>
       </div>
     </form>
+  </div>
+}
+
+@if (deleteTarget(); as user) {
+  <div class="modal-backdrop" (click)="closeDeleteDialog()">
+    <section class="reset-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Delete user ' + user.username" (click)="$event.stopPropagation()">
+      <div>
+        <p class="eyebrow">Delete user</p>
+        <h2>{{ user.username }}</h2>
+        <p class="modal-copy">This account will lose access immediately. Its saved dispatch history will remain.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" [disabled]="isDeleting()" (click)="closeDeleteDialog()">Cancel</button>
+        <button type="button" class="danger-button" [disabled]="isDeleting()" (click)="deleteUser()">{{ isDeleting() ? 'Deleting...' : 'Delete user' }}</button>
+      </div>
+    </section>
   </div>
 }

@@ -17,6 +17,12 @@ export interface DispatchRecord {
   sender_id: number;
   file_path?: string | null;
   message_text?: string | null;
+  send_mode?: 'contact' | 'whatsapp_test';
+  whatsapp_status?: string | null;
+  whatsapp_message_id?: string | null;
+  actual_recipient?: string | null;
+  original_filename?: string | null;
+  failure_reason?: string | null;
   timestamp?: string | null;
   sender?: AuthUser | null;
   recipients: DispatchRecipient[];
@@ -43,6 +49,13 @@ export interface HistoryFilters {
   to_time?: string;
   user_id?: number | null;
   person_id?: number | null;
+  dispatch_id?: number | null;
+  timezone_offset_minutes?: number;
+}
+
+export interface HistorySender {
+  id: number;
+  username: string;
 }
 
 @Injectable({
@@ -52,21 +65,6 @@ export class DispatchService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiBaseUrl}/api/v1/dispatch`;
 
-  sendDispatch(recipientIds: number[], messageText: string, file: File | null): Observable<DispatchRecord> {
-    const formData = new FormData();
-    recipientIds.forEach((recipientId) => formData.append('recipient_ids', String(recipientId)));
-
-    if (messageText.trim()) {
-      formData.append('message_text', messageText.trim());
-    }
-
-    if (file) {
-      formData.append('file', file);
-    }
-
-    return this.http.post<DispatchRecord>(`${this.baseUrl}/send`, formData);
-  }
-
   listHistory(filters: HistoryFilters = {}): Observable<DispatchRecord[]> {
     let params = new HttpParams();
     Object.entries(filters).forEach(([key, value]) => {
@@ -75,6 +73,10 @@ export class DispatchService {
       }
     });
     return this.http.get<DispatchRecord[]>(`${this.baseUrl}/history`, { params });
+  }
+
+  listHistorySenders(): Observable<HistorySender[]> {
+    return this.http.get<HistorySender[]>(`${this.baseUrl}/senders`);
   }
 
   getStats(): Observable<DispatchStats> {

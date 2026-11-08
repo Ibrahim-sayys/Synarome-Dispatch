@@ -1,336 +1,232 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { Subscription } from 'rxjs';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
-import { DispatchRecord, DispatchService, HistoryFilters } from '../../core/dispatch.service';
+import { WhatsAppService } from '../../core/whatsapp.service';
+
+interface SessionMessage {
+  messageId: string;
+  recordId: number;
+  text: string;
+  attachmentName: string | null;
+  attachmentUrl: string | null;
+  isImage: boolean;
+  time: Date;
+}
 
 @Component({
   selector: 'app-dispatch',
-  imports: [ReactiveFormsModule],
+  imports: [DatePipe, ReactiveFormsModule, RouterLink],
   templateUrl: './dispatch.html',
   styleUrl: './dispatch.css',
 })
 export class DispatchPage implements OnInit, OnDestroy {
+  protected readonly stage = signal<'contacts' | 'compose'>('contacts');
   protected readonly contacts = signal<MarketingPerson[]>([]);
-  protected readonly contactSearchTerm = signal('');
+  protected readonly isLoadingContacts = signal(false);
+  protected readonly contactsError = signal('');
+  protected readonly contactSearch = signal('');
   protected readonly selectedRecipientIds = signal<Set<number>>(new Set());
-  protected readonly history = signal<DispatchRecord[]>([]);
-  protected readonly isSending = signal(false);
-  protected readonly isLoadingHistory = signal(false);
-  protected readonly historySearch = signal('');
-  protected readonly historyFromDate = signal('');
-  protected readonly historyToDate = signal('');
-  protected readonly historyFromTime = signal('');
-  protected readonly historyToTime = signal('');
-  protected readonly historyUserId = signal<number | null>(null);
-  protected readonly message = signal('');
-  protected readonly isErrorMessage = signal(false);
-  protected readonly selectedFile = signal<File | null>(null);
-  protected readonly selectedFilePreviewUrl = signal<string | null>(null);
-  protected readonly selectedFileName = computed(() => this.selectedFile()?.name ?? 'No file selected');
-  protected readonly isSelectedFileImage = computed(() => {
-    const file = this.selectedFile();
-    if (!file) return false;
-    return file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name);
-  });
-  protected readonly lightboxUrl = signal<string | null>(null);
-  protected readonly lightboxTitle = signal<string>('');
-  protected readonly isLoadingHistoryPreview = signal<number | null>(null);
-  private historyPreviewBlobUrl: string | null = null;
-  protected readonly hasActiveHistoryFilters = computed(() => {
-    return Boolean(
-      this.historySearch().trim() ||
-      this.historyUserId() !== null ||
-      this.historyFromDate() ||
-      this.historyToDate() ||
-      this.historyFromTime() ||
-      this.historyToTime()
-    );
-  });
-  protected readonly activeHistoryFilterCount = computed(() => {
-    let count = 0;
-    if (this.historySearch().trim()) count++;
-    if (this.historyUserId() !== null) count++;
-    if (this.historyFromDate()) count++;
-    if (this.historyToDate()) count++;
-    if (this.historyFromTime()) count++;
-    if (this.historyToTime()) count++;
-    return count;
-  });
   protected readonly selectedCount = computed(() => this.selectedRecipientIds().size);
   protected readonly filteredContacts = computed(() => {
-    const term = this.contactSearchTerm().trim().toLowerCase();
-    if (!term) {
-      return this.contacts();
-    }
-
-    return this.contacts().filter((contact) => {
-      return (
-        contact.full_name.toLowerCase().includes(term) ||
-        contact.phone_number.toLowerCase().includes(term)
-      );
-    });
+    const term = this.contactSearch().trim().toLowerCase();
+    return term ? this.contacts().filter((contact) =>
+      contact.full_name.toLowerCase().includes(term) || contact.phone_number.includes(term),
+    ) : this.contacts();
   });
-  protected readonly historyUsers = computed(() => {
-    const users = new Map<number, string>();
-    this.history().forEach((record) => {
-      if (record.sender) users.set(record.sender.id, record.sender.username);
-    });
-    return Array.from(users, ([id, username]) => ({ id, username })).sort((a, b) => a.username.localeCompare(b.username));
+  protected readonly selectedContacts = computed(() =>
+    this.contacts().filter((contact) => this.selectedRecipientIds().has(contact.id)),
+  );
+  protected readonly allContactsSelected = computed(() => {
+    const contacts = this.contacts();
+    return contacts.length > 0 && contacts.every((contact) => this.selectedRecipientIds().has(contact.id));
   });
+  protected readonly isSending = signal(false);
+  protected readonly error = signal('');
+  protected readonly selectedFile = signal<File | null>(null);
+  protected readonly selectedAttachmentUrl = signal<string | null>(null);
+  protected readonly selectedFileIsImage = computed(() => this.selectedFile()?.type.startsWith('image/') ?? false);
+  protected readonly sessionMessages = signal<SessionMessage[]>([]);
+  protected readonly enlargedImage = signal<{ url: string; name: string } | null>(null);
 
   private readonly contactsService = inject(ContactsService);
-  private readonly dispatchService = inject(DispatchService);
+  private readonly whatsappService = inject(WhatsAppService);
   private readonly formBuilder = inject(NonNullableFormBuilder);
+  private readonly chatThread = viewChild<ElementRef<HTMLDivElement>>('chatThread');
+  private readonly messageInput = viewChild<ElementRef<HTMLTextAreaElement>>('messageInput');
+  private contactsRequest?: Subscription;
 
-  protected readonly dispatchForm = this.formBuilder.group({
-    message_text: [''],
-  });
+  protected readonly dispatchForm = this.formBuilder.group({ message_text: [''] });
 
   ngOnInit(): void {
     this.loadContacts();
-    this.loadHistory();
   }
 
   protected loadContacts(): void {
-    this.contactsService.listContacts('', false).subscribe({
-      next: (contacts) => this.contacts.set(contacts),
-      error: () => this.showMessage('Unable to load active contacts.', true),
-    });
-  }
-
-  protected loadHistory(): void {
-    this.isLoadingHistory.set(true);
-    const filters: HistoryFilters = {
-      search: this.historySearch(),
-      from_date: this.historyFromDate(),
-      to_date: this.historyToDate(),
-      from_time: this.historyFromTime(),
-      to_time: this.historyToTime(),
-      user_id: this.historyUserId(),
-    };
-    this.dispatchService.listHistory(filters).subscribe({
-      next: (history) => {
-        this.history.set(history);
-        this.isLoadingHistory.set(false);
+    this.contactsRequest?.unsubscribe();
+    this.isLoadingContacts.set(true);
+    this.contactsError.set('');
+    this.contactsRequest = this.contactsService.listContacts('', false).subscribe({
+      next: (contacts) => {
+        this.contacts.set(contacts);
+        const validIds = new Set(contacts.map((contact) => contact.id));
+        const selected = this.selectedRecipientIds();
+        if ([...selected].some((id) => !validIds.has(id))) {
+          this.selectedRecipientIds.set(new Set([...selected].filter((id) => validIds.has(id))));
+          this.clearSessionMessages();
+        }
+        this.isLoadingContacts.set(false);
       },
       error: () => {
-        this.showMessage('Unable to load dispatch history.', true);
-        this.isLoadingHistory.set(false);
+        this.contactsError.set('Unable to load contacts.');
+        this.isLoadingContacts.set(false);
       },
     });
-  }
-
-  protected setHistoryFilter(filter: 'search' | 'fromDate' | 'toDate' | 'fromTime' | 'toTime' | 'user', value: string): void {
-    if (filter === 'search') this.historySearch.set(value);
-    if (filter === 'fromDate') this.historyFromDate.set(value);
-    if (filter === 'toDate') this.historyToDate.set(value);
-    if (filter === 'fromTime') this.historyFromTime.set(value);
-    if (filter === 'toTime') this.historyToTime.set(value);
-    if (filter === 'user') this.historyUserId.set(value ? Number(value) : null);
-    this.loadHistory();
-  }
-
-  protected clearHistoryFilters(): void {
-    this.historySearch.set('');
-    this.historyFromDate.set('');
-    this.historyToDate.set('');
-    this.historyFromTime.set('');
-    this.historyToTime.set('');
-    this.historyUserId.set(null);
-    this.loadHistory();
   }
 
   protected toggleRecipient(contactId: number, checked: boolean): void {
     const next = new Set(this.selectedRecipientIds());
-    if (checked) {
-      next.add(contactId);
-    } else {
-      next.delete(contactId);
-    }
+    if (checked) next.add(contactId);
+    else next.delete(contactId);
     this.selectedRecipientIds.set(next);
+    this.clearSessionMessages();
   }
 
-  protected selectAllRecipients(): void {
+  protected selectAllContacts(): void {
     const next = new Set(this.selectedRecipientIds());
-    this.filteredContacts().forEach((c) => next.add(c.id));
+    this.contacts().forEach((contact) => next.add(contact.id));
     this.selectedRecipientIds.set(next);
+    this.clearSessionMessages();
   }
 
   protected clearRecipients(): void {
     this.selectedRecipientIds.set(new Set());
+    this.clearSessionMessages();
   }
 
-  protected readonly isAllFilteredSelected = computed(() => {
-    const filtered = this.filteredContacts();
-    if (filtered.length === 0) return false;
-    const selected = this.selectedRecipientIds();
-    return filtered.every((c) => selected.has(c.id));
-  });
-
-  protected searchContacts(value: string): void {
-    this.contactSearchTerm.set(value);
+  protected continueToMessage(): void {
+    if (!this.selectedCount()) return;
+    this.stage.set('compose');
+    this.scrollToLatest();
   }
 
-  private revokePreviewUrl(): void {
-    const url = this.selectedFilePreviewUrl();
-    if (url) {
-      URL.revokeObjectURL(url);
-    }
+  protected backToContacts(): void {
+    if (!this.isSending()) this.stage.set('contacts');
   }
 
-  private revokeHistoryPreviewUrl(): void {
-    if (this.historyPreviewBlobUrl) {
-      URL.revokeObjectURL(this.historyPreviewBlobUrl);
-      this.historyPreviewBlobUrl = null;
-    }
+  private clearSessionMessages(): void {
+    this.enlargedImage.set(null);
+    this.sessionMessages().forEach((message) => {
+      if (message.attachmentUrl) URL.revokeObjectURL(message.attachmentUrl);
+    });
+    this.sessionMessages.set([]);
   }
 
   protected setFile(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
-    this.revokePreviewUrl();
-    this.selectedFile.set(file);
-    if (file && (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(file.name))) {
-      this.selectedFilePreviewUrl.set(URL.createObjectURL(file));
-    } else {
-      this.selectedFilePreviewUrl.set(null);
+    input.value = '';
+    this.removeFile();
+    if (!file) return;
+
+    const isJpeg = /\.jpe?g$/i.test(file.name) && file.type === 'image/jpeg';
+    const isPng = /\.png$/i.test(file.name) && file.type === 'image/png';
+    const isPdf = /\.pdf$/i.test(file.name) && file.type === 'application/pdf';
+    if (!isJpeg && !isPng && !isPdf) {
+      this.error.set('Choose a JPG, PNG, or PDF file.');
+      return;
     }
+    const limit = isPdf ? 100 : 5;
+    if (file.size > limit * 1024 * 1024) {
+      this.error.set(`This file exceeds the ${limit} MB limit.`);
+      return;
+    }
+    this.error.set('');
+    this.selectedFile.set(file);
+    this.selectedAttachmentUrl.set(URL.createObjectURL(file));
   }
 
   protected removeFile(): void {
-    this.revokePreviewUrl();
+    const url = this.selectedAttachmentUrl();
+    if (url) URL.revokeObjectURL(url);
     this.selectedFile.set(null);
-    this.selectedFilePreviewUrl.set(null);
+    this.selectedAttachmentUrl.set(null);
   }
 
-  protected openLightbox(url: string, title = 'Image Preview'): void {
-    this.lightboxUrl.set(url);
-    this.lightboxTitle.set(title);
+  protected handleEnter(event: Event): void {
+    const keyboard = event as KeyboardEvent;
+    if (keyboard.shiftKey || keyboard.isComposing) return;
+    event.preventDefault();
+    this.sendMessage();
   }
 
-  protected closeLightbox(): void {
-    this.lightboxUrl.set(null);
-    this.lightboxTitle.set('');
+  protected resizeMessageInput(input?: HTMLTextAreaElement): void {
+    if (!input) return;
+    input.style.height = 'auto';
+    const contentHeight = input.scrollHeight;
+    input.style.height = `${Math.min(Math.max(contentHeight, 36), 170)}px`;
+    input.style.overflowY = contentHeight > 170 ? 'auto' : 'hidden';
+  }
+
+  protected sendMessage(): void {
+    if (this.isSending() || this.stage() !== 'compose' || !this.selectedCount()) return;
+    const text = this.dispatchForm.getRawValue().message_text.trim();
+    const file = this.selectedFile();
+    if (!text && !file) return;
+    if (file && text.length > 1024) {
+      this.error.set('A file caption can contain up to 1024 characters.');
+      return;
+    }
+
+    this.error.set('');
+    this.isSending.set(true);
+    this.whatsappService.send(text, file, [...this.selectedRecipientIds()]).subscribe({
+      next: (result) => {
+        this.sessionMessages.update((current) => [...current, {
+          messageId: result.message_id,
+          recordId: result.record_id,
+          text,
+          attachmentName: file?.name ?? null,
+          attachmentUrl: this.selectedAttachmentUrl(),
+          isImage: !!file?.type.startsWith('image/'),
+          time: new Date(),
+        }]);
+        this.selectedFile.set(null);
+        this.selectedAttachmentUrl.set(null);
+        this.dispatchForm.reset({ message_text: '' });
+        this.resizeMessageInput(this.messageInput()?.nativeElement);
+        this.isSending.set(false);
+        this.scrollToLatest();
+      },
+      error: (response) => {
+        const detail = response.error?.detail;
+        this.error.set(typeof detail === 'string' ? detail : 'Unable to send the test message.');
+        this.isSending.set(false);
+      },
+    });
+  }
+
+  protected formatFileSize(bytes: number): string {
+    return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  private scrollToLatest(): void {
+    requestAnimationFrame(() => {
+      const thread = this.chatThread()?.nativeElement;
+      if (thread) thread.scrollTop = thread.scrollHeight;
+    });
   }
 
   @HostListener('window:keydown.escape')
-  protected onEscapeKey(): void {
-    if (this.lightboxUrl()) {
-      this.closeLightbox();
-    }
-  }
-
-  protected isImageFile(path?: string | null): boolean {
-    if (!path) return false;
-    return /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(path);
-  }
-
-  protected previewHistoryFile(record: DispatchRecord): void {
-    if (!record.file_path) return;
-    this.isLoadingHistoryPreview.set(record.id);
-    this.dispatchService.downloadFile(record.id).subscribe({
-      next: (blob) => {
-        this.revokeHistoryPreviewUrl();
-        const url = URL.createObjectURL(blob);
-        this.historyPreviewBlobUrl = url;
-        this.openLightbox(url, `Dispatch #${record.id} Attachment`);
-        this.isLoadingHistoryPreview.set(null);
-      },
-      error: () => {
-        this.showMessage('Unable to load image preview.', true);
-        this.isLoadingHistoryPreview.set(null);
-      },
-    });
+  protected onEscape(): void {
+    if (this.enlargedImage()) this.enlargedImage.set(null);
   }
 
   ngOnDestroy(): void {
-    this.revokePreviewUrl();
-    this.revokeHistoryPreviewUrl();
-  }
-
-  protected getInitials(name: string): string {
-    return name
-      .split(' ')
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((n) => n[0].toUpperCase())
-      .join('');
-  }
-
-  protected formatFileSize(bytes?: number): string {
-    if (!bytes) return '';
-    const kb = bytes / 1024;
-    if (kb < 1024) return `${kb.toFixed(1)} KB`;
-    return `${(kb / 1024).toFixed(1)} MB`;
-  }
-
-  protected sendDispatch(): void {
-    this.clearMessage();
-
-    const recipientIds = Array.from(this.selectedRecipientIds());
-    const messageText = this.dispatchForm.getRawValue().message_text;
-    const file = this.selectedFile();
-
-    if (recipientIds.length === 0) {
-      this.showMessage('Select at least one recipient.', true);
-      return;
-    }
-
-    if (!messageText.trim() && !file) {
-      this.showMessage('Add a message or choose a file.', true);
-      return;
-    }
-
-    this.isSending.set(true);
-    this.dispatchService.sendDispatch(recipientIds, messageText, file).subscribe({
-      next: (record) => {
-        const hasUnsent = record.recipients.some((recipient) => recipient.delivery_status !== 'sent');
-        this.showMessage(hasUnsent ? 'Dispatch recorded, but WhatsApp needs configuration.' : 'Dispatch sent.');
-        this.dispatchForm.reset({ message_text: '' });
-        this.revokePreviewUrl();
-        this.selectedFile.set(null);
-        this.selectedFilePreviewUrl.set(null);
-        this.selectedRecipientIds.set(new Set());
-        this.isSending.set(false);
-        this.loadHistory();
-      },
-      error: (error) => {
-        this.showMessage(error.error?.detail ?? 'Unable to send dispatch.', true);
-        this.isSending.set(false);
-      },
-    });
-  }
-
-  protected downloadFile(record: DispatchRecord): void {
-    this.dispatchService.downloadFile(record.id).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `dispatch-${record.id}`;
-        link.click();
-        URL.revokeObjectURL(url);
-      },
-      error: () => this.showMessage('Unable to download dispatch file.', true),
-    });
-  }
-
-  protected statusText(record: DispatchRecord): string {
-    const sent = record.recipients.filter((recipient) => recipient.delivery_status === 'sent').length;
-    return `${sent}/${record.recipients.length} sent`;
-  }
-
-  protected contactIsSelected(contactId: number): boolean {
-    return this.selectedRecipientIds().has(contactId);
-  }
-
-  private showMessage(message: string, isError = false): void {
-    this.message.set(message);
-    this.isErrorMessage.set(isError);
-  }
-
-  private clearMessage(): void {
-    this.message.set('');
-    this.isErrorMessage.set(false);
+    this.contactsRequest?.unsubscribe();
+    this.removeFile();
+    this.clearSessionMessages();
   }
 }

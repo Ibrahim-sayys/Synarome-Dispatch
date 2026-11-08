@@ -7,16 +7,17 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    WHATSAPP_API_URL: str = "https://graph.facebook.com/v26.0"
-    WHATSAPP_API_TOKEN: str = ""
+    WHATSAPP_API_VERSION: str = "v26.0"
+    WHATSAPP_ACCESS_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
-    WHATSAPP_DRY_RUN: bool = False
+    WHATSAPP_TEST_RECIPIENT: str = ""
 
     UPLOAD_DIR: str = "uploads"
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        env_file_encoding="utf-8"
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
 

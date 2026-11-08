@@ -1,6 +1,5 @@
 import { Component, OnInit, computed, signal, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { ApiHealthService } from '../../core/api-health.service';
 import { AuthService } from '../../core/auth.service';
 import { DispatchService, DispatchStats, DispatchRecord } from '../../core/dispatch.service';
 
@@ -12,11 +11,8 @@ import { DispatchService, DispatchStats, DispatchRecord } from '../../core/dispa
 })
 export class Dashboard implements OnInit {
   private readonly auth = inject(AuthService);
-  private readonly apiHealth = inject(ApiHealthService);
   private readonly dispatchService = inject(DispatchService);
 
-  protected readonly apiStatus = signal('Checking');
-  protected readonly apiStatusDetail = signal('Connecting to backend...');
   protected readonly stats = signal<DispatchStats | null>(null);
   protected readonly isLoadingStats = signal(true);
 
@@ -27,7 +23,6 @@ export class Dashboard implements OnInit {
   });
 
   ngOnInit(): void {
-    this.checkHealth();
     this.loadStats();
   }
 
@@ -44,24 +39,15 @@ export class Dashboard implements OnInit {
     });
   }
 
-  private checkHealth(): void {
-    this.apiHealth.getHealth().subscribe({
-      next: (health) => {
-        this.apiStatus.set(health.status);
-        this.apiStatusDetail.set('FastAPI backend online');
-      },
-      error: () => {
-        this.apiStatus.set('Unavailable');
-        this.apiStatusDetail.set('Backend not reachable');
-      },
-    });
-  }
-
   protected getSentCount(record: DispatchRecord): number {
+    if (record.send_mode === 'whatsapp_test') return record.whatsapp_status === 'accepted' ? 1 : 0;
     return record.recipients.filter((r) => r.delivery_status === 'sent').length;
   }
 
   protected getStatusBadgeClass(record: DispatchRecord): string {
+    if (record.send_mode === 'whatsapp_test') {
+      return record.whatsapp_status === 'accepted' ? 'success' : record.whatsapp_status === 'failed' ? 'danger' : 'neutral';
+    }
     const sent = this.getSentCount(record);
     const total = record.recipients.length;
     if (total === 0) return 'neutral';
@@ -71,10 +57,13 @@ export class Dashboard implements OnInit {
   }
 
   protected getStatusLabel(record: DispatchRecord): string {
+    if (record.send_mode === 'whatsapp_test') {
+      return record.whatsapp_status === 'accepted' ? 'Meta accepted' : record.whatsapp_status === 'failed' ? 'Failed' : 'Status uncertain';
+    }
     const sent = this.getSentCount(record);
     const total = record.recipients.length;
     if (total === 0) return 'No recipients';
     if (sent === total) return `${sent}/${total} Sent`;
-    return `${sent}/${total} Delivered`;
+    return `${sent}/${total} Submitted`;
   }
 }

@@ -30,7 +30,7 @@ def list_contacts(
     search: str | None = Query(default=None, max_length=100),
     include_inactive: bool = False,
 ):
-    query = db.query(MarketingPerson)
+    query = db.query(MarketingPerson).filter(MarketingPerson.is_deleted.is_(False))
 
     if not include_inactive:
         query = query.filter(MarketingPerson.is_active.is_(True))
@@ -69,7 +69,7 @@ def create_contact(
 
     existing_name_contact = (
         db.query(MarketingPerson)
-        .filter(func.lower(MarketingPerson.full_name) == payload.full_name.strip().lower())
+        .filter(MarketingPerson.is_deleted.is_(False), func.lower(MarketingPerson.full_name) == payload.full_name.strip().lower())
         .first()
     )
     if existing_name_contact:
@@ -100,7 +100,7 @@ def update_contact(
     db: Session = Depends(get_db),
 ):
     contact = db.get(MarketingPerson, contact_id)
-    if not contact:
+    if not contact or contact.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Contact not found",
@@ -123,6 +123,7 @@ def update_contact(
             db.query(MarketingPerson)
             .filter(
                 MarketingPerson.id != contact_id,
+                MarketingPerson.is_deleted.is_(False),
                 func.lower(MarketingPerson.full_name) == payload.full_name.strip().lower(),
             )
             .first()
@@ -154,14 +155,14 @@ def delete_contact(
     db: Session = Depends(get_db),
 ):
     contact = db.get(MarketingPerson, contact_id)
-    if not contact:
+    if not contact or contact.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Contact not found",
         )
 
     contact.is_active = False
-    contact.suspended_by = current_user.id
+    contact.is_deleted = True
     db.commit()
     db.refresh(contact)
 

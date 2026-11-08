@@ -22,6 +22,12 @@ class DispatchResponse(BaseModel):
     sender_id: int
     file_path: str | None = None
     message_text: str | None = None
+    send_mode: str = "contact"
+    whatsapp_status: str | None = None
+    whatsapp_message_id: str | None = None
+    actual_recipient: str | None = None
+    original_filename: str | None = None
+    failure_reason: str | None = None
     timestamp: datetime | None = None
     sender: UserResponse | None = None
     recipients: list[DispatchRecipientResponse] = []
@@ -42,3 +48,10 @@ class DispatchStatsResponse(BaseModel):
     active_contacts: int
     delivery_rate: float
     recent_dispatches: list[DispatchResponse] = []
+
+
+class HistorySenderResponse(BaseModel):
+    id: int
+    username: str
+
+    model_config = {"from_attributes": True}

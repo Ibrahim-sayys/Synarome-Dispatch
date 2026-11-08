@@ -1,7 +1,8 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService, AuthUser } from '../../core/auth.service';
 import { UsersService } from '../../core/users.service';
+import { ActionNotice } from '../../core/action-notice';
 
 @Component({
   selector: 'app-users',
@@ -9,14 +10,17 @@ import { UsersService } from '../../core/users.service';
   templateUrl: './users.html',
   styleUrl: './users.css',
 })
-export class Users implements OnInit {
+export class Users implements OnInit, OnDestroy {
   protected readonly users = signal<AuthUser[]>([]);
   protected readonly isLoading = signal(false);
   protected readonly isSaving = signal(false);
   protected readonly isResetting = signal(false);
-  protected readonly message = signal('');
-  protected readonly isErrorMessage = signal(false);
+  protected readonly isDeleting = signal(false);
+  private readonly notice = new ActionNotice();
+  protected readonly message = this.notice.message;
+  protected readonly isErrorMessage = this.notice.isError;
   protected readonly resetTarget = signal<AuthUser | null>(null);
+  protected readonly deleteTarget = signal<AuthUser | null>(null);
   protected readonly currentUser = inject(AuthService).currentUser;
   protected readonly roleOptions = computed(() => {
     const role = this.currentUser()?.role;
@@ -79,6 +83,10 @@ export class Users implements OnInit {
 
   ngOnInit(): void {
     this.loadUsers();
+  }
+
+  ngOnDestroy(): void {
+    this.notice.destroy();
   }
 
   protected loadUsers(): void {
@@ -152,6 +160,35 @@ export class Users implements OnInit {
     });
   }
 
+  protected openDeleteDialog(user: AuthUser): void {
+    if (!this.canResetPassword(user)) return;
+    this.clearMessage();
+    this.deleteTarget.set(user);
+  }
+
+  protected closeDeleteDialog(): void {
+    if (!this.isDeleting()) this.deleteTarget.set(null);
+  }
+
+  protected deleteUser(): void {
+    const target = this.deleteTarget();
+    if (!target || !this.canResetPassword(target) || this.isDeleting()) return;
+    this.isDeleting.set(true);
+    this.usersService.deleteUser(target.id).subscribe({
+      next: () => {
+        this.deleteTarget.set(null);
+        this.isDeleting.set(false);
+        this.showMessage(`User ${target.username} deleted.`);
+        this.loadUsers();
+      },
+      error: (error) => {
+        this.deleteTarget.set(null);
+        this.isDeleting.set(false);
+        this.showMessage(error.error?.detail ?? 'Unable to delete user.', true);
+      },
+    });
+  }
+
   protected canResetPassword(user: AuthUser): boolean {
     const actor = this.currentUser();
     if (!actor || actor.id === user.id) {
@@ -166,12 +203,10 @@ export class Users implements OnInit {
   }
 
   private showMessage(message: string, isError = false): void {
-    this.message.set(message);
-    this.isErrorMessage.set(isError);
+    this.notice.show(message, isError);
   }
 
   private clearMessage(): void {
-    this.message.set('');
-    this.isErrorMessage.set(false);
+    this.notice.clear();
   }
 }

@@ -3,6 +3,7 @@ import { authGuard, userManagementGuard } from './core/auth.guard';
 import { Contacts } from './pages/contacts/contacts';
 import { Dashboard } from './pages/dashboard/dashboard';
 import { DispatchPage } from './pages/dispatch/dispatch';
+import { DispatchHistoryPage } from './pages/dispatch-history/dispatch-history';
 import { Login } from './pages/login/login';
 import { Users } from './pages/users/users';
 
@@ -34,6 +35,12 @@ export const routes: Routes = [
     component: Contacts,
     canActivate: [authGuard],
     title: 'Contacts - Synarome Dispatch',
+  },
+  {
+    path: 'dispatch/history',
+    component: DispatchHistoryPage,
+    canActivate: [authGuard],
+    title: 'Dispatch History - Synarome Dispatch',
   },
   {
     path: 'dispatch',

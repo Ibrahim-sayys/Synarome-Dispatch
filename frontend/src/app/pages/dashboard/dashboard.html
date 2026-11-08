@@ -1,14 +1,8 @@
 <section class="dashboard">
-  <!-- Operational Header Banner -->
   <div class="welcome-banner">
     <div class="welcome-content">
-      <div class="welcome-tag">
-        <span class="pulse-dot"></span>
-        <span>System Operational</span>
-        <span class="role-pill">{{ currentUser()?.role || 'Staff' }}</span>
-      </div>
-      <h2>Operational Dashboard</h2>
-      <p>Real-time analytics for bilty messages, recipient delivery, and WhatsApp dispatches.</p>
+      <h2>Dashboard</h2>
+      <p>Dispatch activity and WhatsApp message submissions.</p>
     </div>
     <div class="banner-actions">
       <button type="button" class="refresh-btn" (click)="loadStats()" title="Refresh statistics">
@@ -40,13 +34,13 @@
     <!-- Card 2: Total Messages Delivered -->
     <article class="stat-card">
       <div class="stat-header">
-        <span class="stat-label">Messages Delivered</span>
+        <span class="stat-label">Messages Accepted</span>
         <span class="stat-badge success">{{ stats()?.delivery_rate ?? 100 }}% Rate</span>
       </div>
       <div class="stat-body">
         <strong class="stat-value">{{ stats()?.messages_sent ?? 0 }}</strong>
         <p class="stat-meta">
-          Out of <strong>{{ stats()?.total_messages ?? 0 }}</strong> total recipient dispatches
+          Out of <strong>{{ stats()?.total_messages ?? 0 }}</strong> total submissions
         </p>
       </div>
       <div class="stat-footer-bar success-bar"></div>
@@ -88,12 +82,12 @@
     <div class="delivery-progress-card">
       <div class="progress-info">
         <div>
-          <h4>Delivery Health Overview</h4>
-          <p>{{ s.messages_sent }} sent successfully &bull; {{ s.messages_failed }} failed or unconfigured</p>
+          <h4>Submission Overview</h4>
+          <p>{{ s.messages_sent }} accepted &bull; {{ s.messages_failed }} failed or unconfigured</p>
         </div>
         <div class="rate-indicator">
           <strong>{{ s.delivery_rate }}%</strong>
-          <span>Success Rate</span>
+          <span>Acceptance Rate</span>
         </div>
       </div>
       <div class="progress-track">
@@ -108,7 +102,7 @@
     </div>
   }
 
-  <!-- Recent Dispatches & System Info -->
+  <!-- Recent Dispatches & Shortcuts -->
   <div class="dashboard-split">
     <!-- Recent Dispatches Activity -->
     <section class="activity-panel">
@@ -117,7 +111,7 @@
           <p class="eyebrow">Recent Activity</p>
           <h3>Latest Dispatches</h3>
         </div>
-        <a routerLink="/dispatch" class="view-all-link">View all &rarr;</a>
+        <a routerLink="/dispatch/history" class="view-all-link">View all &rarr;</a>
       </div>
 
       <div class="recent-list">
@@ -125,11 +119,11 @@
           <p class="loading-state">Loading dispatch activity...</p>
         } @else {
           @for (record of stats()?.recent_dispatches; track record.id) {
-            <article class="recent-item">
+            <a class="recent-item" routerLink="/dispatch/history" [queryParams]="{ dispatch_id: record.id }" [attr.aria-label]="'Open dispatch ' + record.id + ' in history'">
               <div class="recent-item-main">
                 <div class="recent-title">
                   <strong>#{{ record.id }}</strong>
-                  <span class="recipient-count">{{ record.recipients.length }} recipients</span>
+                  <span class="recipient-count">{{ record.send_mode === 'whatsapp_test' ? 'Test send' : record.recipients.length + ' recipients' }}</span>
                   <span class="status-chip" [class]="getStatusBadgeClass(record)">
                     {{ getStatusLabel(record) }}
                   </span>
@@ -145,7 +139,7 @@
                 <span class="time">{{ record.timestamp || '-' }}</span>
                 <span class="sender">By {{ record.sender?.username || 'Unknown' }}</span>
               </div>
-            </article>
+            </a>
           } @empty {
             <p class="empty-state">No dispatches sent yet. Start by sending your first WhatsApp update.</p>
           }
@@ -153,7 +147,7 @@
       </div>
     </section>
 
-    <!-- Quick Navigation & Health -->
+    <!-- Quick Navigation -->
     <aside class="side-panel">
       <!-- Quick Shortcuts -->
       <div class="shortcuts-card">
@@ -185,17 +179,6 @@
         </div>
       </div>
 
-      <!-- Service Health -->
-      <div class="health-card">
-        <h4>System Health</h4>
-        <div class="health-row">
-          <span class="health-service">FastAPI Backend</span>
-          <span class="health-badge" [class.online]="apiStatus() === 'healthy'">
-            {{ apiStatus() }}
-          </span>
-        </div>
-        <p class="health-detail">{{ apiStatusDetail() }}</p>
-      </div>
     </aside>
   </div>
 </section>

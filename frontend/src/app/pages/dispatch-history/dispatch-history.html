@@ -1,0 +1,151 @@
+<section class="history-page">
+  <header class="history-page-header">
+    <div>
+      <a routerLink="/dispatch" class="back-link">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6"/></svg>
+        Back to Dispatch
+      </a>
+      <h2>Dispatch history</h2>
+      <p>Successful dispatches and accepted WhatsApp test sends</p>
+    </div>
+    <button type="button" class="refresh-button" (click)="refresh()" [disabled]="isLoading()">
+      {{ isLoading() ? 'Loading...' : '↻ Refresh' }}
+    </button>
+  </header>
+
+  @if (error()) {
+    <p class="history-error" role="alert">{{ error() }}</p>
+  }
+
+  @if (dispatchId(); as id) {
+    <div class="record-focus">
+      <span>Viewing dispatch #{{ id }}</span>
+      <button type="button" (click)="clearRecordFocus()">Show all history</button>
+    </div>
+  }
+
+  <div class="history-filters">
+    <label class="filter-search">
+      <span>Search</span>
+      <input type="search" placeholder="Message, contact, or number" [value]="search()" (input)="setFilter('search', $any($event.target).value)" />
+    </label>
+    <label>
+      <span>Sender</span>
+      <select [value]="userId() ?? ''" (change)="setFilter('userId', $any($event.target).value)">
+        <option value="">All senders</option>
+        @for (user of historyUsers(); track user.id) {
+          <option [value]="user.id">{{ user.username }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>From date</span>
+      <input type="date" [value]="fromDate()" (change)="setFilter('fromDate', $any($event.target).value)" />
+    </label>
+    <label>
+      <span>From time</span>
+      <input type="time" [value]="fromTime()" (change)="setFilter('fromTime', $any($event.target).value)" />
+    </label>
+    <label>
+      <span>To date</span>
+      <input type="date" [value]="toDate()" (change)="setFilter('toDate', $any($event.target).value)" />
+    </label>
+    <label>
+      <span>To time</span>
+      <input type="time" [value]="toTime()" (change)="setFilter('toTime', $any($event.target).value)" />
+    </label>
+    @if (hasFilters()) {
+      <button type="button" class="clear-button" (click)="clearFilters()">Clear filters</button>
+    }
+  </div>
+
+  @if (sendersError()) {
+    <p class="history-error" role="alert">{{ sendersError() }}</p>
+  }
+
+  <div class="history-results-header">
+    <strong>{{ history().length }} record{{ history().length === 1 ? '' : 's' }}</strong>
+    <small>Test sends show Meta acceptance, not delivery.</small>
+  </div>
+
+  @if (isLoading()) {
+    <p class="empty-state">Loading history...</p>
+  } @else {
+    <div class="history-list">
+      @for (record of history(); track record.id) {
+        <article class="history-card">
+          <div class="card-header">
+            <div class="card-title">
+              <strong>Dispatch #{{ record.id }}</strong>
+              @if (record.send_mode === 'whatsapp_test') {
+                <span class="test-chip">Test send</span>
+              }
+              <span class="status-chip" [class.failed]="record.whatsapp_status === 'failed'">{{ statusText(record) }}</span>
+            </div>
+            <time>{{ record.timestamp ? (record.timestamp | date:'medium') : 'Date unavailable' }}</time>
+          </div>
+
+          @if (record.message_text) {
+            <p class="message-text">{{ record.message_text }}</p>
+          }
+
+          @if (record.failure_reason) {
+            <p class="record-error">{{ record.failure_reason }}</p>
+          }
+
+          @if (record.file_path) {
+            <div class="file-actions">
+              @if (isImageFile(record.file_path)) {
+                <button type="button" (click)="previewImage(record)" [disabled]="loadingPreviewId() !== null">
+                  {{ loadingPreviewId() === record.id ? 'Opening...' : 'View image' }}
+                </button>
+              }
+              <button type="button" (click)="downloadFile(record)">Download attachment</button>
+            </div>
+          }
+
+          <div class="card-footer">
+            <span>By {{ record.sender?.username || 'Unknown sender' }}</span>
+            @if (record.send_mode === 'whatsapp_test') {
+              <span>Actual destination: {{ record.actual_recipient || 'Configured test recipient' }}</span>
+              @if (record.whatsapp_message_id) {
+                <span class="message-id" [title]="record.whatsapp_message_id">Meta ID: {{ record.whatsapp_message_id }}</span>
+              }
+            }
+            <div class="recipient-list">
+              @for (recipient of record.recipients; track recipient.id) {
+                <span class="recipient-chip" [class.demo]="recipient.delivery_status === 'demo_selected'" [class.failed]="recipient.delivery_status !== 'sent' && recipient.delivery_status !== 'demo_selected'">
+                  {{ recipient.person?.full_name || 'Recipient' }} · {{ recipient.delivery_status === 'demo_selected' ? 'Demo selected' : recipient.delivery_status === 'sent' ? 'Submitted' : (recipient.delivery_status || 'Pending') }}
+                </span>
+              }
+            </div>
+          </div>
+        </article>
+      } @empty {
+        @if (!error()) {
+          <p class="empty-state">
+            @if (dispatchId()) {
+              No successful dispatch found for #{{ dispatchId() }}.
+            } @else if (userId() !== null) {
+              {{ hasOtherFilters() ? 'No dispatches by this user match these filters.' : 'No dispatches by this user.' }}
+            } @else {
+              No successful dispatches match these filters.
+            }
+          </p>
+        }
+      }
+    </div>
+  }
+
+  @if (previewUrl(); as url) {
+    <div class="image-overlay" (click)="closePreview()">
+      <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="previewTitle()" (click)="$event.stopPropagation()">
+        <div class="image-dialog-header">
+          <strong>{{ previewTitle() }}</strong>
+          <button type="button" (click)="closePreview()" aria-label="Close image">&times;</button>
+        </div>
+        <img [src]="url" [alt]="previewTitle()" />
+      </div>
+    </div>
+  }
+</section>

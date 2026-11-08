@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, contacts, dispatch, users
+from app.api.v1.endpoints import auth, contacts, dispatch, users, whatsapp
 
 
 api_router = APIRouter()
@@ -28,3 +28,5 @@ api_router.include_router(
     prefix="/dispatch",
     tags=["Dispatch"]
 )
+
+api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["WhatsApp Testing"])

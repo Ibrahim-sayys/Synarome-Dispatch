@@ -1,2 +1,5 @@
-# Synarome-Dispatch
-Synarome Dispatch is a web-based bilty and WhatsApp dispatch management system built to streamline contact management, file sharing, and dispatch tracking for Synarome. It provides role-based access, marketing personnel management, multi-recipient WhatsApp sending, and centralized dispatch history.
+# Synarome Dispatch
+
+Angular frontend, FastAPI backend, and PostgreSQL based Bilty dispatch system.
+
+See [WhatsApp test setup](docs/whatsapp-testing.md) for the sending-only Meta Cloud API integration.

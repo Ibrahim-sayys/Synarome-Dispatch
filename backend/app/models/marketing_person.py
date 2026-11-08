@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, text
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -9,5 +10,9 @@ class MarketingPerson(Base):
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String(150), nullable=False)
     phone_number = Column(String(30), nullable=False, unique=True)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    is_deleted = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     added_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    suspended_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    suspended_by_user = relationship("User", foreign_keys=[suspended_by])

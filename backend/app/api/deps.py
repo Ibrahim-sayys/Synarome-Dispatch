@@ -31,7 +31,10 @@ def get_current_user(
         raise credentials_exception
 
     user = db.query(User).filter(User.username == username).first()
-    if not user:
+    if not user or not user.is_active:
+        raise credentials_exception
+
+    if payload.get("session_version") != user.session_version:
         raise credentials_exception
 
     return user

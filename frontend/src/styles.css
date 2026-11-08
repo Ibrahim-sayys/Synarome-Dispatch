@@ -1,1 +1,247 @@
-/* You can add global styles to this file, and also import other style files */
+/* Modern Design System - Synarome Dispatch */
+:root {
+  /* Light Theme */
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  --app-bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-soft: #f1f5f9;
+  --surface-hover: #f8fafc;
+  --surface-glass: rgba(255, 255, 255, 0.85);
+  
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-focus: #0284c7;
+  
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --text-subtle: #475569;
+  
+  --primary: #0284c7;
+  --primary-hover: #0369a1;
+  --primary-strong: #0c4a6e;
+  --primary-soft: #e0f2fe;
+  --primary-gradient: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  
+  --success: #16a34a;
+  --success-soft: #dcfce7;
+  --success-border: #bbf7d0;
+  
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fee2e2;
+  --danger-border: #fca5a5;
+  
+  --warning: #d97706;
+  --warning-soft: #fef3c7;
+  
+  --disabled: #94a3b8;
+  --disabled-bg: #e2e8f0;
+  
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.05);
+  
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 9999px;
+  
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html[data-theme='dark'] {
+  --app-bg: #0b1120;
+  --surface: #131d31;
+  --surface-soft: #1e293b;
+  --surface-hover: #24344d;
+  --surface-glass: rgba(19, 29, 49, 0.88);
+  
+  --border: #26354a;
+  --border-strong: #334661;
+  --border-focus: #38bdf8;
+  
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-subtle: #cbd5e1;
+  
+  --primary: #38bdf8;
+  --primary-hover: #7dd3fc;
+  --primary-strong: #f0f9ff;
+  --primary-soft: #0c2b45;
+  --primary-gradient: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+  
+  --success: #4ade80;
+  --success-soft: #064e3b;
+  --success-border: #047857;
+  
+  --danger: #f87171;
+  --danger-hover: #ef4444;
+  --danger-soft: #450a0a;
+  --danger-border: #991b1b;
+  
+  --warning: #fbbf24;
+  --warning-soft: #451a03;
+  
+  --disabled: #64748b;
+  --disabled-bg: #1e293b;
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.35), 0 2px 4px -2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.55), 0 8px 10px -6px rgba(0, 0, 0, 0.35);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--app-bg);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Form Controls Baseline */
+input,
+select,
+textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  transition: var(--transition);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  outline: none;
+}
+
+button {
+  font-family: var(--font-family);
+  transition: var(--transition);
+}
+
+/* Theme-Aware Logo Switching */
+.logo-dark {
+  display: none !important;
+}
+
+.logo-light {
+  display: block !important;
+}
+
+html[data-theme='dark'] .logo-light {
+  display: none !important;
+}
+
+html[data-theme='dark'] .logo-dark {
+  display: block !important;
+}
+
+/* Sample Text / Placeholders */
+::placeholder {
+  color: var(--text-muted);
+  opacity: 0.65;
+  font-size: 0.88rem;
+  font-weight: 400;
+}
+
+/* Password Strength Meter */
+.password-strength-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.strength-track {
+  width: 100%;
+  height: 5px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.strength-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.strength-bar.weak { background: #ef4444; }
+.strength-bar.fair { background: #f59e0b; }
+.strength-bar.good { background: #0284c7; }
+.strength-bar.strong { background: #10b981; }
+
+.strength-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.strength-tag {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.74rem;
+}
+
+.strength-tag.weak { color: #ef4444; }
+.strength-tag.fair { color: #f59e0b; }
+.strength-tag.good { color: #0284c7; }
+.strength-tag.strong { color: #10b981; }
+
+.strength-hint {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.field-with-strength {
+  display: flex;
+  flex-direction: column;
+}
+
+.inline-strength {
+  margin-top: 4px;
+}
+

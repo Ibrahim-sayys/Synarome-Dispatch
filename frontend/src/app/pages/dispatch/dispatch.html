@@ -1,150 +1,77 @@
 <section class="dispatch-page">
   <div class="chat-window">
-    @if (stage() === 'contacts') {
-      <header class="chat-header">
-        <div class="chat-identity">
-          <div class="chat-avatar" aria-hidden="true">+</div>
-          <div>
-            <h2>Select recipients</h2>
-            <span>{{ selectedCount() }} selected</span>
-          </div>
-        </div>
-        <a routerLink="/dispatch/history" class="history-link">History</a>
-      </header>
-
+    @if (stage() === 'customers') {
+      <header class="chat-header"><div class="chat-identity"><div class="chat-avatar">+</div><div><h2>Select customer</h2><span>Review the assigned marketing person before sending</span></div></div><a routerLink="/dispatch/history" class="history-link">History</a></header>
       <div class="recipient-stage">
-        <div class="recipient-toolbar">
-          <input type="search" placeholder="Search contacts" aria-label="Search contacts" [value]="contactSearch()" (input)="contactSearch.set($any($event.target).value)" />
-          <button type="button" (click)="selectAllContacts()" [disabled]="allContactsSelected()">Select all</button>
-          @if (selectedCount()) {
-            <button type="button" (click)="clearRecipients()">Clear</button>
-          }
+        <div class="recipient-toolbar"><input type="search" placeholder="Search customers, city, or marketing person" aria-label="Search customers" (input)="search($any($event.target).value)" /></div>
+        @if (error()) { <div class="send-error" role="alert">{{ error() }} <button type="button" (click)="load()">Try again</button></div> }
+        @if (loading()) { <p class="recipient-empty">Loading customers...</p> }
+        <div class="recipient-grid">
+          @for (customer of customers(); track customer.id) {
+            <button type="button" class="recipient-card customer-choice" (click)="choose(customer)">
+              <span class="recipient-avatar">{{ customer.full_name.charAt(0).toUpperCase() }}</span>
+              <span class="recipient-details"><strong>{{ customer.full_name }}</strong><small>{{ customer.city || 'City not set' }} · Marketing: {{ customer.marketing_person.full_name }}</small></span>
+            </button>
+          } @empty { @if (!loading()) { <p class="recipient-empty">No customers found. Add one in Customers.</p> } }
         </div>
-
-        @if (contactsError()) {
-          <div class="recipient-empty" role="alert">
-            <p>{{ contactsError() }}</p>
-            <button type="button" (click)="loadContacts()">Try again</button>
-          </div>
-        } @else if (isLoadingContacts()) {
-          <p class="recipient-empty">Loading contacts...</p>
-        } @else {
-          <div class="recipient-grid">
-            @for (contact of filteredContacts(); track contact.id) {
-              <label class="recipient-card" [class.selected]="selectedRecipientIds().has(contact.id)">
-                <input type="checkbox" [checked]="selectedRecipientIds().has(contact.id)" (change)="toggleRecipient(contact.id, $any($event.target).checked)" />
-                <span class="recipient-avatar" aria-hidden="true">{{ contact.full_name.charAt(0).toUpperCase() }}</span>
-                <span class="recipient-details"><strong>{{ contact.full_name }}</strong><small>{{ contact.phone_number }}</small></span>
-              </label>
-            } @empty {
-              <p class="recipient-empty">No contacts found.</p>
-            }
-          </div>
-        }
       </div>
-
       <footer class="recipient-footer">
-        <span>Test mode: the message is sent once to the configured test recipient.</span>
-        <button type="button" class="continue-button" [disabled]="!selectedCount()" (click)="continueToMessage()">Continue to message &#8594;</button>
+        <div class="pagination-summary"><strong>Showing {{ firstVisible() }}–{{ lastVisible() }}</strong><span> of {{ total() }} customers</span>@if (mode()?.mode === 'test') { <small>Test sends use the configured numbers</small> }</div>
+        <nav class="dispatch-pagination" aria-label="Customer pages">
+          <button type="button" class="page-arrow" aria-label="Previous page" title="Previous page" (click)="changePage(-1)" [disabled]="page() <= 1 || loading()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+          <span class="page-indicator"><strong>{{ page() }}</strong><small>of {{ pageCount() }}</small></span>
+          <button type="button" class="page-arrow" aria-label="Next page" title="Next page" (click)="changePage(1)" [disabled]="page() >= pageCount() || loading()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+        </nav>
       </footer>
-    } @else {
-      <header class="chat-header">
-        <div class="chat-identity">
-          <button type="button" class="back-button" aria-label="Back to recipients" title="Back to recipients" (click)="backToContacts()" [disabled]="isSending()">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6"/></svg>
-          </button>
-          <div class="chat-avatar" aria-hidden="true">{{ selectedCount() }}</div>
-          <div>
-            <h2>{{ selectedCount() === 1 ? selectedContacts()[0]?.full_name : selectedCount() + ' recipients' }}</h2>
-            <span>Test mode · sends once to the configured recipient</span>
-          </div>
-        </div>
-        <a routerLink="/dispatch/history" class="history-link">History</a>
+    } @else if (selected(); as customer) {
+      <header class="chat-header compose-header">
+        <button type="button" class="back-button" aria-label="Back to customers" (click)="back()" [disabled]="sending()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>Back</span></button>
+        <div class="chat-identity"><div class="chat-avatar">{{ customer.full_name.charAt(0).toUpperCase() }}</div><div class="compose-customer-name"><h2>{{ customer.full_name }}</h2><span>{{ customer.city || 'City not set' }}</span></div></div>
+        <input class="compose-chat-search" type="search" placeholder="Search this chat" [attr.aria-label]="'Search chat with ' + customer.full_name" [value]="threadSearch()" (input)="threadSearch.set($any($event.target).value)" />
+        <button type="button" class="add-recipient-button" (click)="openPicker()" [disabled]="sending()">+ Add recipient</button>
+        <span class="compose-count">{{ recipientCount() }} recipient{{ recipientCount() === 1 ? '' : 's' }}</span>
       </header>
-
-      @if (selectedCount() > 1) {
-        <div class="selected-strip" aria-label="Selected contacts">
-          @for (contact of selectedContacts(); track contact.id) {
-            <span>{{ contact.full_name }}</span>
-          }
-        </div>
-      }
-
-      <div class="chat-thread" #chatThread>
-        @for (chat of sessionMessages(); track chat.messageId) {
-          <article class="outgoing-message" [title]="'History #' + chat.recordId + ' · Meta message ID: ' + chat.messageId">
-            @if (chat.attachmentUrl && chat.isImage) {
-              <button type="button" class="chat-image-button" (click)="enlargedImage.set({ url: chat.attachmentUrl!, name: chat.attachmentName || 'Image' })" [attr.aria-label]="'Open ' + chat.attachmentName">
-                <img [src]="chat.attachmentUrl" [alt]="chat.attachmentName || 'Sent image'" />
-              </button>
-            } @else if (chat.attachmentUrl) {
-              <a class="chat-document" [href]="chat.attachmentUrl" [download]="chat.attachmentName || 'document.pdf'">&#128196; {{ chat.attachmentName }}</a>
-            }
-            @if (chat.text) {
-              <p>{{ chat.text }}</p>
-            }
-            <div class="message-meta"><span>Accepted</span><time>{{ chat.time | date:'shortTime' }}</time></div>
-          </article>
-        } @empty {
-          <div class="chat-empty">Start a test message</div>
-        }
-      </div>
-
-      <form class="chat-composer" [formGroup]="dispatchForm" (ngSubmit)="sendMessage()">
-        @if (error()) {
-          <p class="send-error" role="alert">{{ error() }}</p>
-        }
-
+      <div class="compose-recipient-strip"><span class="recipient-pill required"><strong>{{ customer.marketing_person.full_name }}</strong><small>Assigned marketing person</small></span>@if (includeCustomer()) { <span class="recipient-pill"><strong>{{ customer.full_name }}</strong><small>End customer</small><button type="button" [disabled]="sending()" [attr.aria-label]="'Remove ' + customer.full_name" (click)="toggleMainCustomer()">&times;</button></span> }@for (recipient of extraRecipients(); track recipient.kind + recipient.id) { <span class="recipient-pill"><strong>{{ recipient.name }}</strong><small>{{ recipient.kind === 'customer' ? 'Customer' : 'Marketing' }}</small><button type="button" [disabled]="sending()" [attr.aria-label]="'Remove ' + recipient.name" (click)="removeExtra(recipient)">&times;</button></span> }</div>
+      @if (mode()?.mode === 'test') { <div class="compose-mode-bar">Test mode · Marketing sends to {{ mode()?.test_recipient || 'configured marketing test number' }} · Customer sends to {{ mode()?.customer_test_recipient || 'configured customer test number' }}</div> }
+      @if (lastSend(); as result) { <div class="compose-results" role="status">@for (item of result.results; track item.record_id) { <span><strong>{{ item.recipient_name }}</strong> {{ item.status === 'accepted' ? 'accepted' : item.status === 'unknown' ? 'status uncertain' : 'failed' }}@if (item.error) { · {{ item.error }} }</span> }</div> }
+      @if (error()) { <div class="compose-error" role="alert">{{ error() }}</div> }
+      <app-message-thread class="compose-thread" [records]="threadRecords()" [loading]="threadLoading()" [error]="threadError()" [searchTerm]="threadSearch()" [scrollToLatest]="threadScrollToLatest()" emptyMessage="No dispatch messages for this customer yet. Compose the first one below." />
+      <form class="chat-composer" [formGroup]="form" (ngSubmit)="send()">
+        <div class="composer-heading"><strong>Message @if (!selectedFile()) { <span class="required-indicator" aria-label="required">*</span> }</strong><small>{{ selectedFile() ? 'Add an optional caption' : 'Write the dispatch details' }}</small></div>
         @if (selectedFile(); as file) {
-          <div class="attachment-preview">
-            @if (selectedFileIsImage() && selectedAttachmentUrl()) {
-              <img [src]="selectedAttachmentUrl()" [alt]="file.name" />
-            } @else {
-              <span class="pdf-icon" aria-hidden="true">&#128196;</span>
-            }
-            <div class="attachment-details">
-              <strong [title]="file.name">{{ file.name }}</strong>
-              <small>{{ formatFileSize(file.size) }}</small>
-            </div>
-            <button type="button" class="remove-attachment" (click)="removeFile()" [disabled]="isSending()" aria-label="Remove attachment">&times;</button>
+          <div class="attachment-preview" [class.has-image]="selectedImageUrl()">
+            @if (selectedImageUrl(); as imageUrl) { <button type="button" class="attachment-image-button" (click)="isImagePreviewOpen.set(true)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name"><img [src]="imageUrl" [alt]="'Selected image: ' + file.name" /></button> }
+            @else { <span class="pdf-icon" aria-hidden="true">📄</span> }
+            <div class="attachment-details"><strong>{{ file.name }}</strong><small>{{ selectedImageUrl() ? 'Preview selected image before sending' : 'PDF selected for dispatch' }}</small></div>
+            <button type="button" class="remove-attachment" [disabled]="sending()" (click)="removeFile()" aria-label="Remove attachment">&times;</button>
           </div>
         }
-
-        <div class="composer-row">
-          <input #attachmentInput class="file-input" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="setFile($event)" [disabled]="isSending()" />
-          <button type="button" class="attach-button" title="Attach JPG, PNG, or PDF" aria-label="Attach file" (click)="attachmentInput.click()" [disabled]="isSending()">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 11.5-8.8 8.8a6 6 0 0 1-8.5-8.5l9.3-9.3a4 4 0 0 1 5.7 5.7L8.9 17.5a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
-          </button>
-          <div class="message-input-shell">
-            <textarea
-              #messageInput
-              formControlName="message_text"
-              [attr.maxlength]="selectedFile() ? 1024 : 4096"
-              [readonly]="isSending()"
-              (keydown.enter)="handleEnter($event)"
-              (input)="resizeMessageInput(messageInput)"
-              rows="1"
-              placeholder="Message"
-              aria-label="WhatsApp message"
-            ></textarea>
-          </div>
-          <button type="submit" class="send-button" [disabled]="isSending() || (!dispatchForm.getRawValue().message_text.trim() && !selectedFile())" [attr.aria-label]="isSending() ? 'Sending' : 'Send message'">
-            {{ isSending() ? '...' : '➤' }}
-          </button>
-        </div>
+        <div class="composer-row"><input #attachmentInput class="file-input" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="setFile($event)" [disabled]="sending()" /><button type="button" class="attach-button" aria-label="Attach file" title="Attach image or PDF" (click)="attachmentInput.click()" [disabled]="sending()">📎</button><div class="message-input-shell"><textarea #messageInput formControlName="message_text" [attr.maxlength]="selectedFile() ? 1024 : 4096" rows="1" placeholder="Write your dispatch message…" aria-label="Dispatch message" [readonly]="sending()" (input)="resizeMessageInput(messageInput)"></textarea></div><button type="submit" class="send-button" [disabled]="sending() || !mode() || (!form.getRawValue().message_text.trim() && !selectedFile())" [attr.aria-label]="sending() ? 'Sending' : 'Send message'">{{ sending() ? '...' : '➤' }}</button></div>
+        <small class="composer-footnote">JPG, PNG or PDF · {{ recipientCount() }} recipient{{ recipientCount() === 1 ? '' : 's' }} selected</small>
       </form>
     }
   </div>
-
-  @if (enlargedImage(); as image) {
-    <div class="image-overlay" (click)="enlargedImage.set(null)">
-      <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="image.name" (click)="$event.stopPropagation()">
-        <div class="image-dialog-header">
-          <strong>{{ image.name }}</strong>
-          <button type="button" (click)="enlargedImage.set(null)" aria-label="Close image">&times;</button>
-        </div>
-        <img [src]="image.url" [alt]="image.name" />
+  @if (isImagePreviewOpen() && selectedImageUrl(); as imageUrl) {
+    <div class="image-overlay">
+      <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="'Preview ' + (selectedFile()?.name || 'image')" (click)="$event.stopPropagation()">
+        <div class="image-dialog-header"><strong>{{ selectedFile()?.name }}</strong><button type="button" (click)="isImagePreviewOpen.set(false)" aria-label="Close image preview">&times;</button></div>
+        <img [src]="imageUrl" [alt]="'Selected image: ' + (selectedFile()?.name || 'image')" />
       </div>
     </div>
+  }
+  @if (pickerOpen()) {
+    <div class="recipient-overlay"><section class="recipient-dialog" role="dialog" aria-modal="true" aria-label="Add dispatch recipients" (click)="$event.stopPropagation()">
+      <div class="recipient-dialog-header"><div><p class="eyebrow">Dispatch recipients</p><h2>Add recipients</h2><p>Choose up to 25 additional people.</p></div><button type="button" class="picker-close" aria-label="Close recipient picker" (click)="closePicker()">&times;</button></div>
+      @if (selected(); as customer) { <button type="button" class="picker-main-customer" [class.selected]="draftIncludeCustomer()" [disabled]="!canCopy() || sending()" (click)="toggleDraftMainCustomer()"><span class="picker-check">{{ draftIncludeCustomer() ? '✓' : '' }}</span><span><strong>Select the end customer {{ customer.full_name }} as recipient</strong><small>@if (mode()?.mode === 'test') { Sends to customer test number {{ mode()?.customer_test_recipient || 'not configured' }} } @else { {{ customer.phone_number || 'Add a phone number to enable' }} }</small></span></button> }
+      <div class="picker-tabs"><button type="button" [class.active]="pickerTab() === 'marketing_person'" (click)="setPickerTab('marketing_person')">Marketing persons</button><button type="button" [class.active]="pickerTab() === 'customer'" (click)="setPickerTab('customer')">Customers</button></div>
+      <div class="picker-search"><input type="search" placeholder="Search name or phone" aria-label="Search additional recipients" [value]="pickerSearch()" (input)="searchPicker($any($event.target).value)" /></div>
+      @if (pickerError()) { <p class="send-error" role="alert">{{ pickerError() }}</p> }
+      <div class="picker-list">
+        @if (pickerTab() === 'marketing_person') { @for (person of filteredPickerPeople(); track person.id) { @if (person.id !== selected()?.marketing_person_id) { <button type="button" class="picker-item" [class.selected]="selectedExtra('marketing_person', person.id)" [disabled]="!person.is_active || (draftExtraRecipients().length >= 25 && !selectedExtra('marketing_person', person.id))" (click)="toggleDraftExtra({kind: 'marketing_person', id: person.id, name: person.full_name, phone: person.phone_number})"><span class="picker-check">{{ selectedExtra('marketing_person', person.id) ? '✓' : '' }}</span><span><strong>{{ person.full_name }}</strong><small>{{ person.phone_number }}</small></span></button> } } @empty { <p class="picker-empty">No marketing persons found.</p> } }
+        @else { @if (pickerLoading()) { <p class="picker-empty">Loading customers...</p> } @else { @for (other of pickerCustomers(); track other.id) { @if (other.id !== selected()?.id) { <button type="button" class="picker-item" [class.selected]="selectedExtra('customer', other.id)" [disabled]="!other.phone_number || (!mode()?.customer_test_recipient && mode()?.mode === 'test') || (draftExtraRecipients().length >= 25 && !selectedExtra('customer', other.id))" (click)="toggleDraftExtra({kind: 'customer', id: other.id, name: other.full_name, phone: other.phone_number || ''})"><span class="picker-check">{{ selectedExtra('customer', other.id) ? '✓' : '' }}</span><span><strong>{{ other.full_name }}</strong><small>{{ other.phone_number || 'No phone number' }} · {{ other.city || 'City not set' }}</small></span></button> } } @empty { <p class="picker-empty">No customers found.</p> } } }
+      </div>
+      @if (pickerTab() === 'customer') { <div class="picker-pagination"><button type="button" (click)="changePickerPage(-1)" [disabled]="pickerPage() <= 1 || pickerLoading()">Previous</button><span>Page {{ pickerPage() }} of {{ pickerPageCount() }}</span><button type="button" (click)="changePickerPage(1)" [disabled]="pickerPage() >= pickerPageCount() || pickerLoading()">Next</button></div> }
+      <div class="picker-footer"><span>{{ draftRecipientCount() }} total recipient{{ draftRecipientCount() === 1 ? '' : 's' }} selected</span><button type="button" (click)="confirmPicker()">Done</button></div>
+    </section></div>
   }
 </section>

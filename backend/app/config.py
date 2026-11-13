@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     WHATSAPP_ACCESS_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
     WHATSAPP_TEST_RECIPIENT: str = ""
+    WHATSAPP_CUSTOMER_TEST_RECIPIENT: str = ""
+    WHATSAPP_SEND_MODE: str = "test"
+    WHATSAPP_DEFAULT_COUNTRY_CODE: str = "92"
 
     UPLOAD_DIR: str = "uploads"
 

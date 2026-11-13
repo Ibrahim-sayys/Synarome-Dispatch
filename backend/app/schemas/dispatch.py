@@ -26,6 +26,14 @@ class DispatchResponse(BaseModel):
     whatsapp_status: str | None = None
     whatsapp_message_id: str | None = None
     actual_recipient: str | None = None
+    customer_id: int | None = None
+    marketing_person_id: int | None = None
+    recipient_kind: str | None = None
+    customer_name: str | None = None
+    marketing_person_name: str | None = None
+    recipient_name: str | None = None
+    recipient_customer_id: int | None = None
+    recipient_marketing_person_id: int | None = None
     original_filename: str | None = None
     failure_reason: str | None = None
     timestamp: datetime | None = None
@@ -35,6 +43,13 @@ class DispatchResponse(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+
+class DispatchHistoryPageResponse(BaseModel):
+    items: list[DispatchResponse]
+    total: int
+    page: int
+    page_size: int
 
 
 class DispatchStatsResponse(BaseModel):

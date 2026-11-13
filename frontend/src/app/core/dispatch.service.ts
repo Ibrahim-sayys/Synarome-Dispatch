@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { EMPTY, Observable, expand, reduce } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { MarketingPerson } from './contacts.service';
 import { AuthUser } from './auth.service';
@@ -17,10 +17,18 @@ export interface DispatchRecord {
   sender_id: number;
   file_path?: string | null;
   message_text?: string | null;
-  send_mode?: 'contact' | 'whatsapp_test';
+  send_mode?: 'contact' | 'whatsapp_test' | 'customer_dispatch' | 'customer_test';
   whatsapp_status?: string | null;
   whatsapp_message_id?: string | null;
   actual_recipient?: string | null;
+  customer_id?: number | null;
+  marketing_person_id?: number | null;
+  recipient_kind?: string | null;
+  customer_name?: string | null;
+  marketing_person_name?: string | null;
+  recipient_name?: string | null;
+  recipient_customer_id?: number | null;
+  recipient_marketing_person_id?: number | null;
   original_filename?: string | null;
   failure_reason?: string | null;
   timestamp?: string | null;
@@ -49,6 +57,8 @@ export interface HistoryFilters {
   to_time?: string;
   user_id?: number | null;
   person_id?: number | null;
+  customer_id?: number | null;
+  recipient_customer_id?: number | null;
   dispatch_id?: number | null;
   timezone_offset_minutes?: number;
 }
@@ -56,6 +66,13 @@ export interface HistoryFilters {
 export interface HistorySender {
   id: number;
   username: string;
+}
+
+export interface HistoryPage {
+  items: DispatchRecord[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 @Injectable({
@@ -73,6 +90,26 @@ export class DispatchService {
       }
     });
     return this.http.get<DispatchRecord[]>(`${this.baseUrl}/history`, { params });
+  }
+
+  listHistoryPage(filters: HistoryFilters = {}, page = 1, pageSize = 20): Observable<HistoryPage> {
+    let params = new HttpParams().set('page', page).set('page_size', pageSize);
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') params = params.set(key, String(value));
+    });
+    return this.http.get<HistoryPage>(`${this.baseUrl}/history/page`, { params });
+  }
+
+  listFullHistory(filters: HistoryFilters = {}): Observable<DispatchRecord[]> {
+    return this.listHistoryPage(filters, 1, 100).pipe(
+      expand((result) => result.page * result.page_size < result.total
+        ? this.listHistoryPage(filters, result.page + 1, 100)
+        : EMPTY),
+      reduce((records, result) => {
+        records.push(...result.items);
+        return records;
+      }, [] as DispatchRecord[]),
+    );
   }
 
   listHistorySenders(): Observable<HistorySender[]> {

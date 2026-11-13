@@ -1,0 +1,27 @@
+<div class="conversation-thread" #thread>
+  @if (hasOlder()) { <button type="button" class="load-older" [disabled]="loadingOlder()" (click)="requestOlder()">{{ loadingOlder() ? 'Loading older messages...' : 'Load older messages' }}</button> }
+  @if (error() || downloadError()) { <p class="history-error" role="alert">{{ error() || downloadError() }}</p> }
+  @if (loading()) { <p class="history-loading">Loading messages...</p> }
+  @else {
+    @for (entry of entries(); track entry.record.id) {
+      @if (entry.showDate) { <div class="conversation-date">{{ entry.timestamp ? (entry.timestamp | date:'EEEE, d MMM y') : 'Date unavailable' }}</div> }
+      <div class="conversation-row">
+        <article class="message-bubble" [class.message-failed]="status(entry.record) === 'Failed'">
+          <div class="message-sender">{{ entry.record.sender?.username || 'Unknown sender' }}</div>
+          <div class="test-destination">To {{ entry.record.recipient_name || entry.record.customer_name || 'recipient' }} · {{ entry.record.actual_recipient || 'Number unavailable' }}</div>
+          @if (isImage(entry.record)) {
+            @if (previewUrls()[entry.record.id]; as url) { <button type="button" class="message-image-button" (click)="openImage(entry.record)" [attr.aria-label]="'Open image from dispatch ' + entry.record.id"><img class="message-image" [src]="url" [alt]="entry.record.original_filename || 'Bilty image'" /></button> }
+            @else { <div class="image-placeholder">{{ previewErrors().has(entry.record.id) ? 'Image unavailable' : 'Loading image...' }}</div> }
+          } @else if (entry.record.file_path) {
+            <button type="button" class="message-document" (click)="downloadAttachment(entry.record)"><span class="document-icon" aria-hidden="true">&#128196;</span><span class="document-label">{{ entry.record.original_filename || (isPdf(entry.record) ? 'Bilty PDF' : 'Attachment') }}<small>Click to download</small></span><span class="document-download" aria-hidden="true">&#8595;</span></button>
+          }
+          @if (entry.record.message_text) { <p class="message-text">{{ entry.record.message_text }}</p> }
+          <div class="message-footer"><span class="message-status">{{ status(entry.record) }}</span><time>{{ entry.timestamp ? (entry.timestamp | date:'d MMM y, h:mm a') : 'Time unavailable' }}</time></div>
+        </article>
+      </div>
+    } @empty { <div class="history-empty-state">{{ searchTerm().trim() ? 'No matching messages.' : emptyMessage() }}</div> }
+  }
+</div>
+@if (expandedImage(); as image) {
+  <div class="image-expanded-backdrop"><div class="image-expanded-dialog" role="dialog" aria-modal="true" [attr.aria-label]="image.label" (click)="$event.stopPropagation()"><div class="image-expanded-header"><strong>{{ image.label }}</strong><button type="button" (click)="expandedImage.set(null)" aria-label="Close image">&times;</button></div><img [src]="image.url" [alt]="image.label" /></div></div>
+}

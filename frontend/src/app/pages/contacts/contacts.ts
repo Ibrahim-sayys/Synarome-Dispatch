@@ -5,6 +5,7 @@ import { EMPTY, Subscription, catchError, from, mergeMap, tap } from 'rxjs';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
 import { ActionNotice } from '../../core/action-notice';
+import { matchesChatSearch } from '../../shared/chat-search';
 
 @Component({
   selector: 'app-contacts',
@@ -14,6 +15,7 @@ import { ActionNotice } from '../../core/action-notice';
 })
 export class Contacts implements OnInit, OnDestroy {
   protected readonly contacts = signal<MarketingPerson[]>([]);
+  protected readonly isAddOpen = signal(false);
   protected readonly searchTerm = signal('');
   protected readonly editingContact = signal<MarketingPerson | null>(null);
   protected readonly openMenuId = signal<number | null>(null);
@@ -25,13 +27,14 @@ export class Contacts implements OnInit, OnDestroy {
   protected readonly isErrorMessage = this.notice.isError;
   protected readonly selectedContact = signal<MarketingPerson | null>(null);
   protected readonly contactHistory = signal<DispatchRecord[]>([]);
+  protected readonly historySearch = signal('');
   protected readonly isLoadingContactHistory = signal(false);
   protected readonly historyError = signal('');
   protected readonly previewUrls = signal<Record<number, string>>({});
   protected readonly previewErrors = signal<Set<number>>(new Set());
   protected readonly expandedImage = signal<{ url: string; label: string } | null>(null);
   protected readonly conversation = computed(() => {
-    const records = [...this.contactHistory()].reverse();
+    const records = [...this.contactHistory()].reverse().filter((record) => matchesChatSearch(record, this.historySearch()));
     let previousDay = '';
     return records.map((record) => {
       const parsed = record.timestamp ? new Date(record.timestamp) : null;
@@ -54,12 +57,12 @@ export class Contacts implements OnInit, OnDestroy {
 
   protected readonly contactForm = this.formBuilder.group({
     full_name: ['', [Validators.required, Validators.minLength(2)]],
-    phone_number: ['', [Validators.required, Validators.minLength(11)]],
+    phone_number: ['', [Validators.required, Validators.pattern(/^[0-9]{11,15}$/)]],
   });
 
   protected readonly editForm = this.formBuilder.group({
     full_name: ['', [Validators.required, Validators.minLength(2)]],
-    phone_number: ['', [Validators.required, Validators.minLength(11)]],
+    phone_number: ['', [Validators.required, Validators.pattern(/^[0-9]{11,15}$/)]],
     is_active: [true],
   });
 
@@ -77,6 +80,16 @@ export class Contacts implements OnInit, OnDestroy {
   protected search(value: string): void {
     this.searchTerm.set(value);
     this.loadContacts();
+  }
+
+  protected openAddDialog(): void {
+    this.clearMessage();
+    this.contactForm.reset({ full_name: '', phone_number: '' });
+    this.isAddOpen.set(true);
+  }
+
+  protected closeAddDialog(): void {
+    if (!this.isSaving()) this.isAddOpen.set(false);
   }
 
   protected saveContact(): void {
@@ -100,6 +113,7 @@ export class Contacts implements OnInit, OnDestroy {
           full_name: '',
           phone_number: '',
         });
+        this.isAddOpen.set(false);
         this.isSaving.set(false);
         this.loadContacts();
       },
@@ -115,13 +129,27 @@ export class Contacts implements OnInit, OnDestroy {
     this.editingContact.set(contact);
     this.editForm.setValue({
       full_name: contact.full_name,
-      phone_number: contact.phone_number,
+      phone_number: contact.phone_number.replace(/\D/g, ''),
       is_active: contact.is_active,
     });
   }
 
   protected toggleMenu(contactId: number): void {
     this.openMenuId.update((id) => id === contactId ? null : contactId);
+  }
+
+  protected onActionsClick(event: MouseEvent): void {
+    if (!(event.target instanceof Element) || !event.target.closest('.contact-menu, .contact-menu-trigger')) {
+      this.closeMenu();
+    }
+    event.stopPropagation();
+  }
+
+  protected digitsOnly(event: Event, form: 'add' | 'edit'): void {
+    const input = event.target as HTMLInputElement;
+    const digits = input.value.replace(/[^0-9]/g, '').slice(0, 15);
+    input.value = digits;
+    (form === 'add' ? this.contactForm : this.editForm).controls.phone_number.setValue(digits);
   }
 
   @HostListener('document:click')
@@ -163,7 +191,7 @@ export class Contacts implements OnInit, OnDestroy {
     this.selectedContact.set(contact);
     this.historyError.set('');
     this.isLoadingContactHistory.set(true);
-    this.historyRequest = this.dispatchService.listHistory({ person_id: contact.id }).subscribe({
+    this.historyRequest = this.dispatchService.listFullHistory({ person_id: contact.id }).subscribe({
       next: (history) => {
         this.contactHistory.set(history);
         this.isLoadingContactHistory.set(false);
@@ -183,6 +211,7 @@ export class Contacts implements OnInit, OnDestroy {
     Object.values(this.previewUrls()).forEach((url) => URL.revokeObjectURL(url));
     this.selectedContact.set(null);
     this.contactHistory.set([]);
+    this.historySearch.set('');
     this.previewUrls.set({});
     this.previewErrors.set(new Set());
     this.expandedImage.set(null);
@@ -194,10 +223,8 @@ export class Contacts implements OnInit, OnDestroy {
     this.previewRequests = from(history.filter((record) => this.isImage(record))).pipe(
       mergeMap((record) => this.dispatchService.downloadFile(record.id).pipe(
         tap((blob) => {
-          const stayAtLatest = this.isNearLatest();
           const url = URL.createObjectURL(blob);
           this.previewUrls.update((current) => ({ ...current, [record.id]: url }));
-          if (stayAtLatest) this.scrollToLatest();
         }),
         catchError(() => {
           this.previewErrors.update((current) => new Set([...current, record.id]));
@@ -211,9 +238,9 @@ export class Contacts implements OnInit, OnDestroy {
     return /\.(png|jpe?g)$/i.test(record.file_path ?? '');
   }
 
-  private isNearLatest(): boolean {
-    const thread = this.conversationThread()?.nativeElement;
-    return !!thread && thread.scrollHeight - thread.clientHeight - thread.scrollTop < 120;
+  protected searchHistory(value: string): void {
+    this.historySearch.set(value);
+    this.scrollToLatest();
   }
 
   private scrollToLatest(): void {
@@ -228,6 +255,12 @@ export class Contacts implements OnInit, OnDestroy {
   }
 
   protected contactStatus(record: DispatchRecord, contactId: number): string {
+    if (record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') {
+      if (record.whatsapp_status === 'accepted') return 'Meta accepted';
+      if (record.whatsapp_status === 'unknown') return 'Status uncertain';
+      if (record.whatsapp_status === 'failed') return 'Failed';
+      return 'Pending';
+    }
     if (record.send_mode === 'whatsapp_test') {
       if (record.whatsapp_status === 'accepted') return 'Meta accepted';
       if (record.whatsapp_status === 'unknown') return 'Status uncertain';
@@ -270,6 +303,7 @@ export class Contacts implements OnInit, OnDestroy {
     else if (this.selectedContact()) this.closeContactHistory();
     else if (this.deleteTarget()) this.closeDeleteDialog();
     else if (this.editingContact()) this.closeEditDialog();
+    else if (this.isAddOpen()) this.closeAddDialog();
     else this.closeMenu();
   }
 

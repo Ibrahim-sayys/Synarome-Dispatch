@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.api.v1.endpoints.dispatch import dispatch_history, dispatch_stats, history_senders
+from app.api.v1.endpoints.dispatch import dispatch_history, dispatch_history_page, dispatch_stats, history_senders
 from app.database import Base
 from app.models.dispatch import Dispatch
 from app.models.dispatch_recipient import DispatchRecipient
@@ -64,6 +64,20 @@ class DispatchHistoryFilterTests(unittest.TestCase):
         self.assertEqual(self.ids(search="15551234567"), {self.first.id})
         self.assertEqual(self.ids(search="50%"), {self.late.id})
         self.assertEqual(self.ids(search="_"), set())
+
+    def test_paged_history_returns_twenty_per_page_with_filtered_total(self):
+        for index in range(45):
+            self._record(self.alice, self.abc, datetime(2026, 11, 8, 8, index % 60, tzinfo=timezone.utc), f"Batch {index}")
+        self.db.commit()
+        filters = dict(search="Batch", from_date=None, to_date=None, from_time=None, to_time=None,
+                       user_id=None, person_id=None, customer_id=None, dispatch_id=None, timezone_offset_minutes=0)
+        pages = [dispatch_history_page(self.alice, self.db, **filters, page=number, page_size=20) for number in (1, 2, 3)]
+        self.assertEqual([len(result.items) for result in pages], [20, 20, 5])
+        self.assertEqual([result.total for result in pages], [45, 45, 45])
+        self.assertEqual(len({record.id for result in pages for record in result.items}), 45)
+        full_page = dispatch_history_page(self.alice, self.db, **filters, page=1, page_size=100)
+        self.assertEqual(len(full_page.items), 45)
+        self.assertEqual(full_page.total, 45)
 
     def test_local_date_boundaries_include_entire_last_day(self):
         self.assertEqual(self.ids(from_date=date(2026, 11, 7)), {self.early.id, self.last.id})

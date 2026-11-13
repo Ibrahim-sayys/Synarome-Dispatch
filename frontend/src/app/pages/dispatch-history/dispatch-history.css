@@ -16,7 +16,8 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 
 .history-filters { align-items: end; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); display: grid; gap: 12px; grid-template-columns: minmax(180px, 2fr) repeat(5, minmax(120px, 1fr)) auto; padding: 18px; }
 .history-filters label { color: var(--text-muted); display: flex; flex-direction: column; font-size: 0.75rem; font-weight: 700; gap: 6px; min-width: 0; }
-.history-filters input, .history-filters select { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-main); font: inherit; font-size: 0.85rem; min-height: 40px; min-width: 0; padding: 8px 10px; width: 100%; }
+.history-filters input, .history-filters select { background-color: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-main); font: inherit; font-size: 0.85rem; min-height: 42px; min-width: 0; padding: 8px 12px; width: 100%; }
+.history-filters select { padding-right: 38px; }
 .history-filters input:focus, .history-filters select:focus { border-color: var(--primary); outline: none; }
 .clear-button { white-space: nowrap; }
 
@@ -45,6 +46,10 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .recipient-chip.failed { background: var(--danger-soft); border-color: var(--danger-border); color: var(--danger); }
 .message-id { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .empty-state { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text-muted); margin: 0; padding: 45px 18px; text-align: center; }
+.history-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 8px 0 20px; }
+.history-pagination button { background-color: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-main); font-weight: 700; min-height: 40px; padding: 8px 14px; }
+.history-pagination button:hover:not(:disabled) { background-color: var(--primary-soft); border-color: var(--primary); color: var(--primary); }
+.history-pagination span { color: var(--text-muted); font-size: 0.85rem; }
 
 .image-overlay { align-items: center; background: rgba(10, 15, 29, 0.85); display: flex; inset: 0; justify-content: center; padding: 20px; position: fixed; z-index: 1100; }
 .image-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); display: flex; flex-direction: column; max-height: 95dvh; max-width: min(1000px, 100%); overflow: hidden; width: 100%; }

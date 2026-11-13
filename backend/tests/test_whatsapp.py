@@ -70,6 +70,14 @@ class WhatsAppServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await (await self._service(handler)).send_text(" Bilty BLT-1025 dispatched ")
         self.assertEqual(result, {"message_id": "wamid.text", "status": "accepted"})
 
+    async def test_explicit_recipient_is_used_for_live_customer_dispatch(self):
+        def handler(request):
+            self.assertEqual(json.loads(request.content)["to"], "923001112222")
+            return httpx.Response(200, json={"messages": [{"id": "wamid.live"}]})
+
+        result = await (await self._service(handler)).send_text("Bilty", "923001112222")
+        self.assertEqual(result["message_id"], "wamid.live")
+
     async def test_image_upload_then_one_captioned_message(self):
         paths = []
 
@@ -88,6 +96,20 @@ class WhatsAppServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await (await self._service(handler)).send_file(upload, "Bilty image")
         self.assertEqual(result["message_id"], "wamid.image")
         self.assertEqual(paths, ["/v26.0/123456/media", "/v26.0/123456/messages"])
+
+    async def test_media_uses_explicit_live_recipient(self):
+        def handler(request):
+            if request.url.path.endswith("/media"):
+                return httpx.Response(200, json={"id": "media-live"})
+            self.assertEqual(json.loads(request.content)["to"], "923001112222")
+            return httpx.Response(200, json={"messages": [{"id": "wamid.live-media"}]})
+
+        service = await self._service(handler)
+        upload = upload_file("bilty.png", "image/png", image_bytes("PNG"))
+        self.addCleanup(upload.file.close)
+        prepared = await service.prepare_file(upload, "Copy", "923001112222")
+        result = await service.send_prepared_file(prepared, "923001112222")
+        self.assertEqual(result["message_id"], "wamid.live-media")
 
     async def test_pdf_uses_safe_filename_and_no_duplicate_text(self):
         calls = []

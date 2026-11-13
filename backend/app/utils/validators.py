@@ -1,3 +1,6 @@
+import re
+
+
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "image/png",
@@ -10,13 +13,6 @@ def is_allowed_file(content_type: str) -> bool:
 
 
 def normalize_phone_number(phone_number: str) -> str:
-    cleaned = "".join(char for char in phone_number.strip() if char.isdigit() or char == "+")
-
-    if cleaned.count("+") > 1 or ("+" in cleaned and not cleaned.startswith("+")):
-        raise ValueError("Phone number can only include + at the start")
-
-    digits = cleaned[1:] if cleaned.startswith("+") else cleaned
-    if not digits.isdigit() or not 11 <= len(digits) <= 15:
-        raise ValueError("Phone number must contain 11 to 15 digits")
-
-    return cleaned
+    if not re.fullmatch(r"[0-9]{11,15}", phone_number):
+        raise ValueError("Phone number must contain 11 to 15 digits only")
+    return phone_number

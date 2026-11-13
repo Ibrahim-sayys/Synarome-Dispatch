@@ -40,12 +40,12 @@ export class Dashboard implements OnInit {
   }
 
   protected getSentCount(record: DispatchRecord): number {
-    if (record.send_mode === 'whatsapp_test') return record.whatsapp_status === 'accepted' ? 1 : 0;
+    if (record.send_mode === 'whatsapp_test' || record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') return record.whatsapp_status === 'accepted' ? 1 : 0;
     return record.recipients.filter((r) => r.delivery_status === 'sent').length;
   }
 
   protected getStatusBadgeClass(record: DispatchRecord): string {
-    if (record.send_mode === 'whatsapp_test') {
+    if (record.send_mode === 'whatsapp_test' || record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') {
       return record.whatsapp_status === 'accepted' ? 'success' : record.whatsapp_status === 'failed' ? 'danger' : 'neutral';
     }
     const sent = this.getSentCount(record);
@@ -57,7 +57,7 @@ export class Dashboard implements OnInit {
   }
 
   protected getStatusLabel(record: DispatchRecord): string {
-    if (record.send_mode === 'whatsapp_test') {
+    if (record.send_mode === 'whatsapp_test' || record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') {
       return record.whatsapp_status === 'accepted' ? 'Meta accepted' : record.whatsapp_status === 'failed' ? 'Failed' : 'Status uncertain';
     }
     const sent = this.getSentCount(record);

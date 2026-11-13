@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard, userManagementGuard } from './core/auth.guard';
 import { Contacts } from './pages/contacts/contacts';
+import { Customers } from './pages/customers/customers';
 import { Dashboard } from './pages/dashboard/dashboard';
 import { DispatchPage } from './pages/dispatch/dispatch';
 import { DispatchHistoryPage } from './pages/dispatch-history/dispatch-history';
@@ -35,6 +36,12 @@ export const routes: Routes = [
     component: Contacts,
     canActivate: [authGuard],
     title: 'Contacts - Synarome Dispatch',
+  },
+  {
+    path: 'customers',
+    component: Customers,
+    canActivate: [authGuard],
+    title: 'Customers - Synarome Dispatch',
   },
   {
     path: 'dispatch/history',

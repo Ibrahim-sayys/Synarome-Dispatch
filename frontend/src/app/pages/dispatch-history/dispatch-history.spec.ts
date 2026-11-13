@@ -8,7 +8,7 @@ import { DispatchHistoryPage } from './dispatch-history';
 
 describe('Dispatch history filters', () => {
   const dispatchService = {
-    listHistory: vi.fn(() => of([])),
+    listHistoryPage: vi.fn((_filters: unknown, page: number) => of({ items: [], total: 0, page, page_size: 20 })),
     listHistorySenders: vi.fn(() => of([
       { id: 1, username: 'alice' },
       { id: 2, username: 'charlie' },
@@ -51,7 +51,7 @@ describe('Dispatch history filters', () => {
       inputs[index].dispatchEvent(new Event('change', { bubbles: true }));
     }
     fixture.detectChanges();
-    expect(dispatchService.listHistory).toHaveBeenLastCalledWith(expect.objectContaining({
+    expect(dispatchService.listHistoryPage).toHaveBeenLastCalledWith(expect.objectContaining({
       search: 'bilty',
       user_id: 2,
       from_date: '2026-11-06',
@@ -59,22 +59,39 @@ describe('Dispatch history filters', () => {
       to_date: '2026-11-07',
       to_time: '17:00',
       timezone_offset_minutes: new Date().getTimezoneOffset(),
-    }));
+    }), 1);
 
     element.querySelector<HTMLButtonElement>('.clear-button')!.click();
-    expect(dispatchService.listHistory).toHaveBeenLastCalledWith(expect.objectContaining({
+    expect(dispatchService.listHistoryPage).toHaveBeenLastCalledWith(expect.objectContaining({
       search: '', user_id: null, from_date: '', to_date: '', from_time: '', to_time: '',
-    }));
+    }), 1);
     fixture.destroy();
   });
 
   it('opens one dispatch from the dashboard link and can return to all history', async () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/dispatch/history?dispatch_id=42', DispatchHistoryPage);
-    expect(dispatchService.listHistory).toHaveBeenLastCalledWith(expect.objectContaining({ dispatch_id: 42 }));
+    expect(dispatchService.listHistoryPage).toHaveBeenLastCalledWith(expect.objectContaining({ dispatch_id: 42 }), 1);
     expect(harness.routeNativeElement?.textContent).toContain('Viewing dispatch #42');
     harness.routeNativeElement?.querySelector<HTMLButtonElement>('.record-focus button')?.click();
     await harness.fixture.whenStable();
-    expect(dispatchService.listHistory).toHaveBeenLastCalledWith(expect.objectContaining({ dispatch_id: null }));
+    expect(dispatchService.listHistoryPage).toHaveBeenLastCalledWith(expect.objectContaining({ dispatch_id: null }), 1);
+  });
+
+  it('moves through server pages and resets to page one when a filter changes', async () => {
+    dispatchService.listHistoryPage.mockImplementation((_filters, page) => of({ items: [], total: 45, page, page_size: 20 }));
+    const fixture = TestBed.createComponent(DispatchHistoryPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('Page 1 of 3');
+    element.querySelectorAll<HTMLButtonElement>('.history-pagination button')[1].click();
+    fixture.detectChanges();
+    expect(dispatchService.listHistoryPage).toHaveBeenLastCalledWith(expect.anything(), 2);
+    const search = element.querySelector<HTMLInputElement>('input[type="search"]')!;
+    search.value = 'Ali';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(dispatchService.listHistoryPage).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'Ali' }), 1);
+    fixture.destroy();
   });
 });

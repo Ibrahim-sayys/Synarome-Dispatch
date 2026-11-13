@@ -1,0 +1,66 @@
+<section class="contacts-page customers-page">
+  <div class="section-header">
+    <div><p class="eyebrow">Recipient directory</p><h2>Customers</h2></div>
+  </div>
+
+  @if (message()) { <p class="message" role="status">{{ message() }}</p> }
+  @if (error()) { <p class="message error-message" role="alert">{{ error() }}</p> }
+
+  <div class="customer-filters">
+    <label class="search">Search customers<input type="search" placeholder="Name, phone, city, or marketing person" [value]="searchTerm()" (input)="search($any($event.target).value)" /></label>
+    <div class="filter-field" data-filter="marketing"><span>Marketing person</span><button type="button" class="filter-trigger" [attr.aria-expanded]="filterOpen() === 'marketing'" (click)="toggleFilter('marketing')">{{ selectedMarketingName() }} <span aria-hidden="true">⌄</span></button>@if (filterOpen() === 'marketing') { <div class="filter-options"><input type="search" aria-label="Search marketing person filter" placeholder="Find a person" [value]="filterSearch()" (input)="filterSearch.set($any($event.target).value)" /><div class="filter-option-list"><button type="button" (click)="setMarketingFilter(null)">All marketing persons</button>@for (person of filteredPeopleForFilter(); track person.id) { <button type="button" (click)="setMarketingFilter(person.id)">{{ person.full_name }}</button> } @empty { <p>No matches</p> }</div></div> }</div>
+    <div class="filter-field" data-filter="city"><span>City</span><button type="button" class="filter-trigger" [attr.aria-expanded]="filterOpen() === 'city'" (click)="toggleFilter('city')">{{ selectedCity() || 'All cities' }} <span aria-hidden="true">⌄</span></button>@if (filterOpen() === 'city') { <div class="filter-options"><input type="search" aria-label="Search city filter" placeholder="Find a city" [value]="filterSearch()" (input)="filterSearch.set($any($event.target).value)" /><div class="filter-option-list"><button type="button" (click)="setCityFilter('')">All cities</button>@for (city of filteredCities(); track city) { <button type="button" (click)="setCityFilter(city)">{{ city }}</button> } @empty { <p>No matches</p> }</div></div> }</div>
+    <div class="phone-filter"><span>Phone number</span><div class="phone-filter-options"><button type="button" [class.active]="phoneStatus() === 'all'" (click)="setPhoneFilter('all')">All</button><button type="button" [class.active]="phoneStatus() === 'with_phone'" (click)="setPhoneFilter('with_phone')">Added</button><button type="button" [class.active]="phoneStatus() === 'without_phone'" (click)="setPhoneFilter('without_phone')">Missing</button></div></div>
+    @if (hasActiveFilters()) { <button type="button" class="clear-filters" (click)="clearFilters()">Clear filters</button> }
+  </div>
+  <div class="directory-summary-row"><div class="list-summary">{{ total() }} customers · Page {{ page() }}</div><button type="button" class="add-directory-button" (click)="openAddDialog()">+ Add New Customer</button></div>
+  @if (loading()) { <p>Loading customers...</p> }
+  <div class="contact-list">
+    @for (customer of items(); track customer.id) {
+      <article class="contact-card customer-card">
+        <div><strong>{{ customer.full_name }}</strong><p>{{ customer.phone_number || 'No customer phone' }}</p><small>Marketing person: {{ customer.marketing_person.full_name }} · {{ customer.marketing_person.phone_number }}</small></div>
+        <span class="customer-city">{{ customer.city || 'No city' }}</span>
+        <p class="customer-note">{{ customer.other_info || '' }}</p>
+        <div class="actions" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()">
+          @if (customer.phone_number) { <button type="button" class="messages-button" (click)="openHistory(customer)">View messages</button> } @else { <span class="no-number-label">No number added</span> }
+          <button type="button" class="icon-button" [attr.aria-label]="'Edit ' + customer.full_name" [title]="'Edit ' + customer.full_name" (click)="edit(customer)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11-4-4L4 16v4Zm9-13 4 4"/></svg></button>
+          <button type="button" class="icon-button delete-icon-button" [attr.aria-label]="'Delete ' + customer.full_name" [title]="'Delete ' + customer.full_name" (click)="deleting.set(customer)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6"/></svg></button>
+        </div>
+      </article>
+    } @empty { @if (!loading()) { <p>No customers found.</p> } }
+  </div>
+  <div class="pagination"><button type="button" (click)="changePage(-1)" [disabled]="page() <= 1 || loading()">Previous</button><button type="button" (click)="changePage(1)" [disabled]="page() * 25 >= total() || loading()">Next</button></div>
+</section>
+
+@if (selectedCustomer(); as customer) {
+  <div class="modal-backdrop"><section class="history-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Messages sent to ' + customer.full_name" (click)="$event.stopPropagation()">
+    <div class="history-modal-header"><div class="history-contact-identity"><div class="history-contact-avatar" aria-hidden="true">{{ customer.full_name.charAt(0).toUpperCase() }}</div><div><p class="eyebrow">Customer messages</p><h2>{{ customer.full_name }}</h2><p class="modal-copy">{{ customer.phone_number }} · {{ customerHistory().length }} message{{ customerHistory().length === 1 ? '' : 's' }} sent to this customer</p></div></div><div class="history-header-actions"><label class="chat-search"><span class="visually-hidden">Search messages in {{ customer.full_name }}'s chat</span><input type="search" placeholder="Search this chat" [value]="historySearch()" (input)="historySearch.set($any($event.target).value)" /></label><button type="button" class="secondary close-button" (click)="closeHistory()" aria-label="Close">&times;</button></div></div>
+    <app-message-thread [records]="customerHistory()" [loading]="historyLoading()" [error]="historyError()" [searchTerm]="historySearch()" emptyMessage="No messages have been sent to this customer yet." />
+  </section></div>
+}
+
+@if (isFormOpen()) {
+  <div class="modal-backdrop">
+    <form class="edit-modal customer-dialog" role="dialog" aria-modal="true" [attr.aria-label]="editing() ? 'Edit customer' : 'Add new customer'" [formGroup]="form" (ngSubmit)="save()" (click)="$event.stopPropagation()">
+      <div><p class="eyebrow">Customer directory</p><h2>{{ editing() ? 'Edit customer' : 'Add new customer' }}</h2></div>
+      @if (error()) { <p class="message error-message" role="alert">{{ error() }}</p> }
+      <div class="customer-fields">
+        <label><span>Customer name <span class="required-indicator" aria-label="required">*</span></span><input type="text" formControlName="full_name" placeholder="e.g. Ali Traders" /></label>
+        <div class="person-field"><span>Marketing person <span class="required-indicator" aria-label="required">*</span></span><button type="button" class="person-trigger" [attr.aria-expanded]="personPickerOpen()" (click)="personPickerOpen.set(!personPickerOpen())">{{ chosenMarketingPerson()?.full_name || 'Select marketing person' }}<span aria-hidden="true">⌄</span></button>@if (personPickerOpen()) { <div class="person-options"><input type="search" aria-label="Search marketing persons" placeholder="Search name or phone" [value]="personSearch()" (input)="personSearch.set($any($event.target).value)" /><div class="person-option-list">@for (person of filteredMarketingPersons(); track person.id) { <button type="button" [disabled]="!person.is_active" (click)="chooseMarketingPerson(person)"><strong>{{ person.full_name }}</strong><small>{{ person.phone_number }}{{ person.is_active ? '' : ' · Inactive' }}</small></button> } @empty { <p>No marketing persons found.</p> }</div></div> }</div>
+        <label>Customer phone (optional)<input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="15" formControlName="phone_number" placeholder="03xxxxxxxxx" (input)="digitsOnly($event)" /></label>
+        <label>City (optional)<input type="text" formControlName="city" placeholder="e.g. Lahore" /></label>
+        <label class="other-info">Other info (optional)<textarea formControlName="other_info" rows="3" placeholder="Reference or notes"></textarea></label>
+      </div>
+      <div class="modal-actions"><button type="button" class="secondary" [disabled]="saving()" (click)="closeForm()">Cancel</button><button type="submit" [disabled]="form.invalid || saving()">{{ saving() ? 'Saving...' : editing() ? 'Save changes' : 'Add customer' }}</button></div>
+    </form>
+  </div>
+}
+
+@if (deleting(); as customer) {
+  <div class="modal-backdrop">
+    <section class="edit-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Delete ' + customer.full_name" (click)="$event.stopPropagation()">
+      <h2>Delete {{ customer.full_name }}?</h2><p>Past dispatch history will remain.</p>
+      <div class="modal-actions"><button type="button" class="secondary" (click)="deleting.set(null)">Cancel</button><button type="button" class="danger" [disabled]="saving()" (click)="remove()">Delete customer</button></div>
+    </section>
+  </div>
+}

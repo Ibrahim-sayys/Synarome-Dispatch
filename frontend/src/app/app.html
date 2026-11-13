@@ -13,7 +13,8 @@
         @if (canManageUsers()) {
           <a routerLink="/users" routerLinkActive="active">Users</a>
         }
-        <a routerLink="/contacts" routerLinkActive="active">Contacts</a>
+        <a routerLink="/contacts" routerLinkActive="active">Marketing persons</a>
+        <a routerLink="/customers" routerLinkActive="active">Customers</a>
         <a routerLink="/dispatch" routerLinkActive="active">Dispatch</a>
       </nav>
 
@@ -49,12 +50,12 @@
       </div>
 
       <label>
-        Current password
+        <span>Current password <span class="required-indicator" aria-label="required">*</span></span>
         <input type="password" placeholder="Enter current password" formControlName="currentPassword" autocomplete="current-password" />
       </label>
 
       <label>
-        New password
+        <span>New password <span class="required-indicator" aria-label="required">*</span></span>
         <input type="password" placeholder="Enter new password (min. 8 characters)" formControlName="newPassword" autocomplete="new-password" />
       </label>
 

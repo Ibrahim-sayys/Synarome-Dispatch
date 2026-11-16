@@ -1,4 +1,5 @@
 import { Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ReactiveFormsModule, NonNullableFormBuilder } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
@@ -7,6 +8,7 @@ import { Customer, CustomersService } from '../../core/customers.service';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
 import { MessageThread } from '../../shared/message-thread/message-thread';
+import { ScannerDevice, ScannerService, scannedPagesToPdf, scannedPageToPng } from '../../core/scanner.service';
 
 interface ExtraRecipient { kind: 'marketing_person' | 'customer'; id: number; name: string; phone: string; }
 
@@ -31,9 +33,23 @@ export class DispatchPage implements OnInit, OnDestroy {
   protected readonly mode = signal<SendMode | null>(null);
   protected readonly includeCustomer = signal(false);
   protected readonly draftIncludeCustomer = signal(false);
-  protected readonly selectedFile = signal<File | null>(null);
+  protected readonly selectedFiles = signal<File[]>([]);
+  protected readonly selectedFile = computed(() => this.selectedFiles()[0] ?? null);
+  protected readonly attachmentResults = signal<{ filename: string; result: SendResponse }[]>([]);
   protected readonly selectedImageUrl = signal<string | null>(null);
   protected readonly isImagePreviewOpen = signal(false);
+  protected readonly previewUrl = signal<string | null>(null);
+  protected readonly previewPdfUrl = signal<SafeResourceUrl | null>(null);
+  protected readonly previewName = signal('');
+  protected readonly attachmentMenuOpen = signal(false);
+  protected readonly scanHelpOpen = signal(false);
+  protected readonly scanDevices = signal<ScannerDevice[]>([]);
+  protected readonly scanDeviceId = signal('');
+  protected readonly scanPages = signal<File[]>([]);
+  protected readonly scanBusy = signal(false);
+  protected readonly scanError = signal('');
+  protected readonly scanFormat = signal<'pdf' | 'jpeg' | 'png'>('pdf');
+  private scanGeneration = 0;
   protected readonly sending = signal(false);
   protected readonly lastSend = signal<SendResponse | null>(null);
   protected readonly threadRecords = signal<DispatchRecord[]>([]);
@@ -66,6 +82,8 @@ export class DispatchPage implements OnInit, OnDestroy {
   private readonly dispatchService = inject(CustomerDispatchService);
   private readonly historyService = inject(DispatchService);
   private readonly builder = inject(NonNullableFormBuilder);
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly scanner = inject(ScannerService);
   private readonly searchInput = new Subject<string>();
   private readonly pickerSearchInput = new Subject<string>();
   private readonly messageInput = viewChild<ElementRef<HTMLTextAreaElement>>('messageInput');
@@ -122,13 +140,13 @@ export class DispatchPage implements OnInit, OnDestroy {
     if (this.error() !== 'Unable to load WhatsApp send mode.') this.error.set('');
     this.includeCustomer.set(false);
     this.extraRecipients.set([]);
-    this.lastSend.set(null);
+    this.lastSend.set(null); this.attachmentResults.set([]);
     this.threadRecords.set([]); this.threadSearch.set(''); this.threadScrollToLatest.set(true);
     this.stage.set('compose');
     this.loadThread();
   }
 
-  protected back(): void { if (!this.sending()) { this.closePicker(); this.threadSubscription?.unsubscribe(); this.stage.set('customers'); } }
+  protected back(): void { if (!this.sending()) { this.closeScanner(); this.clearFiles(); this.form.reset({ message_text: '' }); this.closePicker(); this.threadSubscription?.unsubscribe(); this.stage.set('customers'); } }
 
   private loadThread(): void {
     const customer = this.selected();
@@ -213,27 +231,116 @@ export class DispatchPage implements OnInit, OnDestroy {
 
   protected setFile(event: Event): void {
     const input = event.target as HTMLInputElement;
-    const file = input.files?.[0] || null;
+    const files = Array.from(input.files || []);
     input.value = '';
-    if (!file) return;
-    const valid = (/\.jpe?g$/i.test(file.name) && file.type === 'image/jpeg') ||
-      (/\.png$/i.test(file.name) && file.type === 'image/png') ||
-      (/\.pdf$/i.test(file.name) && file.type === 'application/pdf');
-    if (!valid) { this.error.set('Choose a JPG, PNG, or PDF file.'); return; }
-    const limit = file.type === 'application/pdf' ? 100 : 5;
-    if (file.size > limit * 1024 * 1024) { this.error.set(`File exceeds ${limit} MB.`); return; }
-    this.removeFile();
-    this.error.set('');
-    this.selectedFile.set(file);
-    if (file.type.startsWith('image/')) this.selectedImageUrl.set(URL.createObjectURL(file));
+    this.addFiles(files);
   }
 
-  protected removeFile(): void {
-    const url = this.selectedImageUrl();
+  private addFiles(files: File[]): boolean {
+    if (!files.length) return false;
+    for (const file of files) {
+      const valid = (/\.jpe?g$/i.test(file.name) && file.type === 'image/jpeg') ||
+        (/\.png$/i.test(file.name) && file.type === 'image/png') ||
+        (/\.pdf$/i.test(file.name) && file.type === 'application/pdf');
+      if (!valid) { this.error.set('Choose JPG, PNG, or PDF files.'); return false; }
+      const limit = file.type === 'application/pdf' ? 100 : 5;
+      if (file.size > limit * 1024 * 1024) { this.error.set(`${file.name} exceeds ${limit} MB.`); return false; }
+    }
+    if (this.selectedFiles().length + files.length > 20) { this.error.set('Choose up to 20 attachments.'); return false; }
+    this.selectedFiles.update((current) => [...current, ...files]);
+    this.error.set('');
+    if (this.selectedFiles().length === files.length) this.updateImagePreview();
+    return true;
+  }
+
+  protected openScanner(): void {
+    this.attachmentMenuOpen.set(false); this.scanHelpOpen.set(true); this.scanError.set('');
+  }
+
+  protected closeScanner(): void {
+    this.scanGeneration++; this.scanHelpOpen.set(false); this.scanBusy.set(false);
+    this.scanPages.set([]); this.scanDevices.set([]); this.scanDeviceId.set(''); this.scanError.set('');
+  }
+
+  protected async findScanners(): Promise<void> {
+    const generation = this.scanGeneration;
+    this.scanBusy.set(true); this.scanError.set('');
+    try {
+      const devices = await this.scanner.devices();
+      if (generation !== this.scanGeneration) return;
+      this.scanDevices.set(devices); this.scanDeviceId.set(devices[0]?.id || '');
+      if (!devices.length) this.scanError.set('No scanners found. Check the Windows scanner driver and connection.');
+    } catch (error) {
+      if (generation === this.scanGeneration) this.scanError.set(error instanceof Error ? error.message : 'Unable to find scanners.');
+    } finally { if (generation === this.scanGeneration) this.scanBusy.set(false); }
+  }
+
+  protected async scanPage(): Promise<void> {
+    if (!this.scanDeviceId() || this.scanBusy()) return;
+    if (this.scanPages().length >= 20) { this.scanError.set('A scan can contain up to 20 pages.'); return; }
+    const generation = this.scanGeneration;
+    this.scanBusy.set(true); this.scanError.set('');
+    try {
+      const page = await this.scanner.scan(this.scanDeviceId());
+      if (generation === this.scanGeneration) this.scanPages.update((pages) => [...pages, page]);
+    } catch (error) {
+      if (generation === this.scanGeneration) this.scanError.set(error instanceof Error ? error.message : 'Unable to scan the page.');
+    } finally { if (generation === this.scanGeneration) this.scanBusy.set(false); }
+  }
+
+  protected removeScannedPage(index: number): void {
+    this.scanPages.update((pages) => pages.filter((_, i) => i !== index));
+    this.closePreview();
+  }
+
+  protected async addScannedPages(): Promise<void> {
+    if (!this.scanPages().length || this.scanBusy()) return;
+    const generation = this.scanGeneration;
+    this.scanBusy.set(true); this.scanError.set('');
+    try {
+      const pages = this.scanPages();
+      const files = this.scanFormat() === 'pdf' ? [await scannedPagesToPdf(pages)] :
+        this.scanFormat() === 'png' ? await Promise.all(pages.map(scannedPageToPng)) : pages;
+      if (generation !== this.scanGeneration) return;
+      if (this.addFiles(files)) this.closeScanner();
+      else this.scanError.set(this.error());
+    } catch {
+      if (generation === this.scanGeneration) this.scanError.set('Could not prepare the scanned document. Try again or choose JPEG.');
+    } finally { if (generation === this.scanGeneration) this.scanBusy.set(false); }
+  }
+
+  private updateImagePreview(): void {
+    const previous = this.selectedImageUrl();
+    if (previous) URL.revokeObjectURL(previous);
+    const file = this.selectedFile();
+    this.selectedImageUrl.set(file?.type.startsWith('image/') ? URL.createObjectURL(file) : null);
+    this.closePreview();
+  }
+
+  protected previewFile(file: File): void {
+    this.closePreview();
+    const url = URL.createObjectURL(file);
+    this.previewUrl.set(url);
+    this.previewName.set(file.name);
+    this.previewPdfUrl.set(file.type === 'application/pdf' ? this.sanitizer.bypassSecurityTrustResourceUrl(url) : null);
+    this.isImagePreviewOpen.set(true);
+  }
+
+  protected closePreview(): void {
+    const url = this.previewUrl();
     if (url) URL.revokeObjectURL(url);
-    this.selectedImageUrl.set(null);
-    this.selectedFile.set(null);
-    this.isImagePreviewOpen.set(false);
+    this.previewUrl.set(null); this.previewPdfUrl.set(null); this.isImagePreviewOpen.set(false);
+  }
+
+  protected removeFile(index = 0): void {
+    this.selectedFiles.update((files) => files.filter((_, i) => i !== index));
+    if (index === 0) this.updateImagePreview();
+    else this.closePreview();
+  }
+
+  private clearFiles(): void {
+    this.selectedFiles.set([]);
+    this.updateImagePreview();
   }
 
   protected resizeMessageInput(input: HTMLTextAreaElement): void {
@@ -246,37 +353,51 @@ export class DispatchPage implements OnInit, OnDestroy {
   protected send(): void {
     const customer = this.selected();
     const message = this.form.getRawValue().message_text.trim();
-    const file = this.selectedFile();
-    if (!customer || this.sending() || (!message && !file)) return;
-    if (file && message.length > 1024) { this.error.set('A file caption can contain up to 1024 characters.'); return; }
-    this.error.set(''); this.lastSend.set(null); this.sending.set(true);
-    this.dispatchService.send(customer.id, this.includeCustomer(), message, file,
-      this.extraRecipients().filter((item) => item.kind === 'marketing_person').map((item) => item.id),
-      this.extraRecipients().filter((item) => item.kind === 'customer').map((item) => item.id)).subscribe({
-      next: (result) => {
-        this.lastSend.set(result);
-        this.sending.set(false);
-        this.threadSearch.set('');
-        this.threadScrollToLatest.set(true);
-        this.loadThread();
-        this.form.reset({ message_text: '' });
-        this.removeFile();
-        const input = this.messageInput()?.nativeElement;
-        if (input) this.resizeMessageInput(input);
-      },
-      error: (response) => {
-        this.error.set(typeof response.error?.detail === 'string' ? response.error.detail : 'Unable to send dispatch.');
-        this.sending.set(false);
-      },
-    });
+    const files = [...this.selectedFiles()];
+    if (!customer || this.sending() || (!message && !files.length)) return;
+    if (files.length && message.length > 1024) { this.error.set('A file caption can contain up to 1024 characters.'); return; }
+    this.error.set(''); this.lastSend.set(null); this.attachmentResults.set([]); this.sending.set(true);
+    const marketingIds = this.extraRecipients().filter((item) => item.kind === 'marketing_person').map((item) => item.id);
+    const customerIds = this.extraRecipients().filter((item) => item.kind === 'customer').map((item) => item.id);
+    const sendNext = (index: number): void => {
+      const file = files[index] ?? null;
+      this.dispatchService.send(customer.id, this.includeCustomer(), index === 0 ? message : '', file, marketingIds, customerIds).subscribe({
+        next: (result) => {
+          this.lastSend.set(result);
+          if (file) {
+            this.attachmentResults.update((items) => [...items, { filename: file.name, result }]);
+            this.removeFile();
+          }
+          if (index === 0) this.form.reset({ message_text: '' });
+          this.threadSearch.set(''); this.threadScrollToLatest.set(true); this.loadThread();
+          const input = this.messageInput()?.nativeElement;
+          if (input) this.resizeMessageInput(input);
+          if (result.results.some((item) => item.status !== 'accepted')) {
+            this.error.set('Sending stopped. Check each recipient result before retrying; some may already have received the attachment.');
+            this.sending.set(false);
+          } else if (index + 1 < files.length) {
+            sendNext(index + 1);
+          } else {
+            this.sending.set(false);
+          }
+        },
+        error: (response) => {
+          const detail = typeof response.error?.detail === 'string' ? response.error.detail : 'Unable to confirm the dispatch result.';
+          this.error.set(`${detail} Sending stopped. Check dispatch history and WhatsApp before retrying; the current attachment may have been sent. It remains in the draft; do not retry until you check.`);
+          this.sending.set(false); this.loadThread();
+        },
+      });
+    };
+    sendNext(0);
   }
 
   ngOnDestroy(): void {
+    this.closeScanner();
     this.listSubscription?.unsubscribe();
     this.searchSubscription?.unsubscribe();
     this.pickerSearchSubscription?.unsubscribe();
     this.pickerListSubscription?.unsubscribe();
     this.threadSubscription?.unsubscribe();
-    this.removeFile();
+    this.clearFiles();
   }
 }

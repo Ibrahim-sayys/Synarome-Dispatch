@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { Observable, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomerDispatchService, SendMode } from '../../core/customer-dispatch.service';
+import { ScannerService } from '../../core/scanner.service';
 import { CustomersService } from '../../core/customers.service';
 import { ContactsService } from '../../core/contacts.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
@@ -207,6 +208,80 @@ describe('Customer dispatch flow', () => {
       URL.createObjectURL = originalCreate;
       URL.revokeObjectURL = originalRevoke;
     }
+  });
+
+  it('sends multiple attachments in order with the caption on the first', async () => {
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    const fileInput = element.querySelector<HTMLInputElement>('.file-input')!;
+    const first = new File(['pdf'], 'first.pdf', { type: 'application/pdf' });
+    const second = new File(['pdf'], 'second.pdf', { type: 'application/pdf' });
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [first, second] });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    const textarea = element.querySelector<HTMLTextAreaElement>('textarea')!;
+    textarea.value = 'Caption'; textarea.dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    expect(element.querySelectorAll('.attachment-preview')).toHaveLength(2);
+    element.querySelector<HTMLButtonElement>('.send-button')!.click(); fixture.detectChanges();
+    expect(dispatch.send).toHaveBeenNthCalledWith(1, 1, false, 'Caption', first, [], []);
+    expect(dispatch.send).toHaveBeenNthCalledWith(2, 1, false, '', second, [], []);
+    expect(element.querySelectorAll('.attachment-preview')).toHaveLength(0);
+    expect(element.textContent).toContain('first.pdf');
+    expect(element.textContent).toContain('second.pdf');
+    fixture.destroy();
+  });
+
+  it('stops sending remaining attachments when a recipient fails', async () => {
+    dispatch.send.mockImplementationOnce(() => of({ mode: 'live', results: [{
+      record_id: 2, recipient_kind: 'marketing_person', recipient_name: 'John', actual_recipient: '923001112222',
+      status: 'failed', message_id: 'wamid.test', error: null,
+    }] }));
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    const input = element.querySelector<HTMLInputElement>('.file-input')!;
+    Object.defineProperty(input, 'files', { configurable: true, value: [
+      new File(['pdf'], 'first.pdf', { type: 'application/pdf' }),
+      new File(['pdf'], 'second.pdf', { type: 'application/pdf' }),
+    ] });
+    input.dispatchEvent(new Event('change', { bubbles: true })); fixture.detectChanges();
+    element.querySelector<HTMLButtonElement>('.send-button')!.click(); fixture.detectChanges();
+    expect(dispatch.send).toHaveBeenCalledTimes(1);
+    expect(element.querySelector('.compose-error')?.textContent).toContain('Sending stopped');
+    expect(element.querySelector('.attachment-preview')?.textContent).toContain('second.pdf');
+    fixture.destroy();
+  });
+
+  it('discovers a scanner and adds a scanned JPEG to the draft', async () => {
+    const scanner = TestBed.inject(ScannerService);
+    vi.spyOn(scanner, 'devices').mockResolvedValue([{ id: 'scanner-1', name: 'Flatbed' }]);
+    vi.spyOn(scanner, 'scan').mockResolvedValue(new File(['jpeg'], 'scan.jpg', { type: 'image/jpeg' }));
+    const create = URL.createObjectURL;
+    const revoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:scan');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const fixture = TestBed.createComponent(DispatchPage);
+      fixture.detectChanges(); await fixture.whenStable();
+      const element = fixture.nativeElement as HTMLElement;
+      element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.attach-button')!.click(); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.attachment-menu button')].find((button) => button.textContent?.includes('Scan Document'))!.click(); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Find scanners'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(element.querySelector('.scan-help select')?.textContent).toContain('Flatbed');
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Scan page'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      const format = element.querySelectorAll<HTMLSelectElement>('.scan-help select')[1];
+      format.value = 'jpeg'; format.dispatchEvent(new Event('change', { bubbles: true })); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Add to message'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(element.querySelector('.attachment-preview')?.textContent).toContain('scan.jpg');
+      expect(scanner.scan).toHaveBeenCalledWith('scanner-1');
+      fixture.destroy();
+    } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; }
   });
 
   it('shows compact pagination and requests the next customer page', async () => {

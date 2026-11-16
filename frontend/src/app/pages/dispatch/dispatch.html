@@ -33,29 +33,53 @@
       </header>
       <div class="compose-recipient-strip"><span class="recipient-pill required"><strong>{{ customer.marketing_person.full_name }}</strong><small>Assigned marketing person</small></span>@if (includeCustomer()) { <span class="recipient-pill"><strong>{{ customer.full_name }}</strong><small>End customer</small><button type="button" [disabled]="sending()" [attr.aria-label]="'Remove ' + customer.full_name" (click)="toggleMainCustomer()">&times;</button></span> }@for (recipient of extraRecipients(); track recipient.kind + recipient.id) { <span class="recipient-pill"><strong>{{ recipient.name }}</strong><small>{{ recipient.kind === 'customer' ? 'Customer' : 'Marketing' }}</small><button type="button" [disabled]="sending()" [attr.aria-label]="'Remove ' + recipient.name" (click)="removeExtra(recipient)">&times;</button></span> }</div>
       @if (mode()?.mode === 'test') { <div class="compose-mode-bar">Test mode · Marketing sends to {{ mode()?.test_recipient || 'configured marketing test number' }} · Customer sends to {{ mode()?.customer_test_recipient || 'configured customer test number' }}</div> }
-      @if (lastSend(); as result) { <div class="compose-results" role="status">@for (item of result.results; track item.record_id) { <span><strong>{{ item.recipient_name }}</strong> {{ item.status === 'accepted' ? 'accepted' : item.status === 'unknown' ? 'status uncertain' : 'failed' }}@if (item.error) { · {{ item.error }} }</span> }</div> }
+      @for (entry of attachmentResults(); track $index) { <div class="compose-results" role="status"><strong>{{ entry.filename }}</strong>@for (item of entry.result.results; track item.record_id) { <span>{{ item.recipient_name }}: {{ item.status }}@if (item.error) { · {{ item.error }} }</span> }</div> }
+      @if (!attachmentResults().length) { @if (lastSend(); as result) { <div class="compose-results" role="status">@for (item of result.results; track item.record_id) { <span><strong>{{ item.recipient_name }}</strong> {{ item.status === 'accepted' ? 'accepted' : item.status === 'unknown' ? 'status uncertain' : 'failed' }}@if (item.error) { · {{ item.error }} }</span> }</div> } }
       @if (error()) { <div class="compose-error" role="alert">{{ error() }}</div> }
       <app-message-thread class="compose-thread" [records]="threadRecords()" [loading]="threadLoading()" [error]="threadError()" [searchTerm]="threadSearch()" [scrollToLatest]="threadScrollToLatest()" emptyMessage="No dispatch messages for this customer yet. Compose the first one below." />
       <form class="chat-composer" [formGroup]="form" (ngSubmit)="send()">
         <div class="composer-heading"><strong>Message @if (!selectedFile()) { <span class="required-indicator" aria-label="required">*</span> }</strong><small>{{ selectedFile() ? 'Add an optional caption' : 'Write the dispatch details' }}</small></div>
         @if (selectedFile(); as file) {
           <div class="attachment-preview" [class.has-image]="selectedImageUrl()">
-            @if (selectedImageUrl(); as imageUrl) { <button type="button" class="attachment-image-button" (click)="isImagePreviewOpen.set(true)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name"><img [src]="imageUrl" [alt]="'Selected image: ' + file.name" /></button> }
-            @else { <span class="pdf-icon" aria-hidden="true">📄</span> }
+            @if (selectedImageUrl(); as imageUrl) { <button type="button" class="attachment-image-button" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name"><img [src]="imageUrl" [alt]="'Selected image: ' + file.name" /></button> }
+            @else { <button type="button" class="secondary" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name">Preview PDF</button> }
             <div class="attachment-details"><strong>{{ file.name }}</strong><small>{{ selectedImageUrl() ? 'Preview selected image before sending' : 'PDF selected for dispatch' }}</small></div>
             <button type="button" class="remove-attachment" [disabled]="sending()" (click)="removeFile()" aria-label="Remove attachment">&times;</button>
           </div>
         }
-        <div class="composer-row"><input #attachmentInput class="file-input" type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="setFile($event)" [disabled]="sending()" /><button type="button" class="attach-button" aria-label="Attach file" title="Attach image or PDF" (click)="attachmentInput.click()" [disabled]="sending()">📎</button><div class="message-input-shell"><textarea #messageInput formControlName="message_text" [attr.maxlength]="selectedFile() ? 1024 : 4096" rows="1" placeholder="Write your dispatch message…" aria-label="Dispatch message" [readonly]="sending()" (input)="resizeMessageInput(messageInput)"></textarea></div><button type="submit" class="send-button" [disabled]="sending() || !mode() || (!form.getRawValue().message_text.trim() && !selectedFile())" [attr.aria-label]="sending() ? 'Sending' : 'Send message'">{{ sending() ? '...' : '➤' }}</button></div>
-        <small class="composer-footnote">JPG, PNG or PDF · {{ recipientCount() }} recipient{{ recipientCount() === 1 ? '' : 's' }} selected</small>
+        @for (file of selectedFiles().slice(1); track $index) {
+          <div class="attachment-preview"><button type="button" class="secondary" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name">Preview</button><div class="attachment-details"><strong>{{ file.name }}</strong><small>Ready to send</small></div><button type="button" class="remove-attachment" [disabled]="sending()" (click)="removeFile($index + 1)" [attr.aria-label]="'Remove ' + file.name">&times;</button></div>
+        }
+        <div class="composer-row"><input #attachmentInput class="file-input" type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="setFile($event)" [disabled]="sending()" /><button type="button" class="attach-button" aria-label="Attach file" title="Attach image or PDF" (click)="attachmentMenuOpen.set(!attachmentMenuOpen())" [attr.aria-expanded]="attachmentMenuOpen()" [disabled]="sending()">📎</button>@if (attachmentMenuOpen()) { <div class="attachment-menu"><button type="button" (click)="attachmentMenuOpen.set(false); attachmentInput.click()">Browse Files</button><button type="button" (click)="openScanner()">Scan Document</button></div> }<div class="message-input-shell"><textarea #messageInput formControlName="message_text" [attr.maxlength]="selectedFile() ? 1024 : 4096" rows="1" placeholder="Write your dispatch message…" aria-label="Dispatch message" [readonly]="sending()" (input)="resizeMessageInput(messageInput)"></textarea></div><button type="submit" class="send-button" [disabled]="sending() || !mode() || (!form.getRawValue().message_text.trim() && !selectedFile())" [attr.aria-label]="sending() ? 'Sending' : 'Send message'">{{ sending() ? '...' : '➤' }}</button></div>
+        <small class="composer-footnote">JPG, PNG or PDF · {{ selectedFiles().length }} attachment{{ selectedFiles().length === 1 ? '' : 's' }} · {{ recipientCount() }} recipient{{ recipientCount() === 1 ? '' : 's' }} selected</small>
       </form>
     }
   </div>
-  @if (isImagePreviewOpen() && selectedImageUrl(); as imageUrl) {
+  @if (scanHelpOpen()) {
+    <div class="image-overlay"><div class="image-dialog scan-help" role="dialog" aria-modal="true" aria-label="Scan document">
+      <div class="image-dialog-header"><strong>Scan Document</strong><button type="button" (click)="closeScanner()" aria-label="Close scanner">&times;</button></div>
+      <p>Start the Windows scanner companion. Place a page on the scanner and scan each page in turn.</p>
+      <button type="button" class="secondary" (click)="findScanners()" [disabled]="scanBusy()">Find scanners</button>
+      @if (scanDevices().length) {
+        <label>Scanner <select [value]="scanDeviceId()" (change)="scanDeviceId.set($any($event.target).value)" [disabled]="scanBusy()">@for (device of scanDevices(); track device.id) { <option [value]="device.id">{{ device.name }}</option> }</select></label>
+        <button type="button" class="secondary" (click)="scanPage()" [disabled]="scanBusy() || !scanDeviceId()">{{ scanBusy() ? 'Working…' : 'Scan page' }}</button>
+      }
+      @if (scanError()) { <p class="compose-error" role="alert">{{ scanError() }}</p> }
+      @if (scanPages().length) {
+        <p>{{ scanPages().length }} page{{ scanPages().length === 1 ? '' : 's' }} scanned</p>
+        @for (page of scanPages(); track $index) { <div class="scan-page">Page {{ $index + 1 }} <button type="button" (click)="previewFile(page)">Preview</button><button type="button" (click)="removeScannedPage($index)" [disabled]="scanBusy()">Remove</button></div> }
+        <label>Save as <select [value]="scanFormat()" (change)="scanFormat.set($any($event.target).value)" [disabled]="scanBusy()"><option value="pdf">One PDF</option><option value="jpeg">JPEG images</option><option value="png">PNG images</option></select></label>
+        <button type="button" (click)="addScannedPages()" [disabled]="scanBusy()">Add to message</button>
+      }
+      <button type="button" class="secondary" (click)="closeScanner()">Cancel</button>
+    </div></div>
+  }
+  @if (isImagePreviewOpen() && previewUrl(); as url) {
     <div class="image-overlay">
-      <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="'Preview ' + (selectedFile()?.name || 'image')" (click)="$event.stopPropagation()">
-        <div class="image-dialog-header"><strong>{{ selectedFile()?.name }}</strong><button type="button" (click)="isImagePreviewOpen.set(false)" aria-label="Close image preview">&times;</button></div>
-        <img [src]="imageUrl" [alt]="'Selected image: ' + (selectedFile()?.name || 'image')" />
+      <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="'Preview ' + previewName()">
+        <div class="image-dialog-header"><strong>{{ previewName() }}</strong><button type="button" (click)="closePreview()" aria-label="Close preview">&times;</button></div>
+        @if (previewPdfUrl(); as pdfUrl) { <iframe class="pdf-preview" [src]="pdfUrl" [title]="'Preview ' + previewName()"></iframe> }
+        @else { <img [src]="url" [alt]="'Selected image: ' + previewName()" /> }
       </div>
     </div>
   }

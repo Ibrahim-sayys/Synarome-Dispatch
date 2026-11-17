@@ -3,6 +3,7 @@ import { provideRouter } from '@angular/router';
 import { Observable, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomerDispatchService, SendMode } from '../../core/customer-dispatch.service';
+import { ScannerService } from '../../core/scanner.service';
 import { CustomersService } from '../../core/customers.service';
 import { ContactsService } from '../../core/contacts.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
@@ -206,6 +207,185 @@ describe('Customer dispatch flow', () => {
     } finally {
       URL.createObjectURL = originalCreate;
       URL.revokeObjectURL = originalRevoke;
+    }
+  });
+
+  it('sends multiple attachments in order with the caption on the first', async () => {
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    const fileInput = element.querySelector<HTMLInputElement>('.file-input')!;
+    const first = new File(['pdf'], 'first.pdf', { type: 'application/pdf' });
+    const second = new File(['pdf'], 'second.pdf', { type: 'application/pdf' });
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [first, second] });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    const textarea = element.querySelector<HTMLTextAreaElement>('textarea')!;
+    textarea.value = 'Caption'; textarea.dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    expect(element.querySelectorAll('.attachment-preview')).toHaveLength(2);
+    element.querySelector<HTMLButtonElement>('.send-button')!.click(); fixture.detectChanges();
+    expect(dispatch.send).toHaveBeenNthCalledWith(1, 1, false, 'Caption', first, [], []);
+    expect(dispatch.send).toHaveBeenNthCalledWith(2, 1, false, '', second, [], []);
+    expect(element.querySelectorAll('.attachment-preview')).toHaveLength(0);
+    expect(element.textContent).toContain('first.pdf');
+    expect(element.textContent).toContain('second.pdf');
+    fixture.destroy();
+  });
+
+  it('stops sending remaining attachments when a recipient fails', async () => {
+    dispatch.send.mockImplementationOnce(() => of({ mode: 'live', results: [{
+      record_id: 2, recipient_kind: 'marketing_person', recipient_name: 'John', actual_recipient: '923001112222',
+      status: 'failed', message_id: 'wamid.test', error: null,
+    }] }));
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    const input = element.querySelector<HTMLInputElement>('.file-input')!;
+    Object.defineProperty(input, 'files', { configurable: true, value: [
+      new File(['pdf'], 'first.pdf', { type: 'application/pdf' }),
+      new File(['pdf'], 'second.pdf', { type: 'application/pdf' }),
+    ] });
+    input.dispatchEvent(new Event('change', { bubbles: true })); fixture.detectChanges();
+    element.querySelector<HTMLButtonElement>('.send-button')!.click(); fixture.detectChanges();
+    expect(dispatch.send).toHaveBeenCalledTimes(1);
+    expect(element.querySelector('.compose-error')?.textContent).toContain('Sending stopped');
+    expect(element.querySelector('.attachment-preview')?.textContent).toContain('second.pdf');
+    fixture.destroy();
+  });
+
+  it('closes the attachment menu on an outside click', async () => {
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    const button = element.querySelector<HTMLButtonElement>('.attach-button')!;
+    button.click(); fixture.detectChanges();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    element.querySelector<HTMLElement>('.attachment-menu')!.click(); fixture.detectChanges();
+    expect(element.querySelector('.attachment-menu')).not.toBeNull();
+    document.body.click(); fixture.detectChanges();
+    expect(element.querySelector('.attachment-menu')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    fixture.destroy();
+  });
+
+  it('discovers a scanner and adds a scanned JPEG to the draft', async () => {
+    const scanner = TestBed.inject(ScannerService);
+    vi.spyOn(scanner, 'devices').mockResolvedValue([{ id: 'scanner-1', name: 'Flatbed' }]);
+    vi.spyOn(scanner, 'scan').mockResolvedValue(new File(['jpeg'], 'scan.jpg', { type: 'image/jpeg' }));
+    const create = URL.createObjectURL;
+    const revoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:scan');
+    URL.revokeObjectURL = vi.fn();
+    try {
+      const fixture = TestBed.createComponent(DispatchPage);
+      fixture.detectChanges(); await fixture.whenStable();
+      const element = fixture.nativeElement as HTMLElement;
+      element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.attach-button')!.click(); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.attachment-menu button')].find((button) => button.textContent?.includes('Scan Document'))!.click(); fixture.detectChanges();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(scanner.devices).toHaveBeenCalledTimes(1);
+      expect(element.querySelector('.scan-help select')?.textContent).toContain('Flatbed');
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Scan page'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      const format = element.querySelectorAll<HTMLSelectElement>('.scan-help select')[1];
+      format.value = 'jpeg'; format.dispatchEvent(new Event('change', { bubbles: true })); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Add to message'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(element.querySelector('.attachment-preview')?.textContent).toMatch(/Scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}-page-01\.jpg/);
+      expect(scanner.scan).toHaveBeenCalledWith('scanner-1');
+      fixture.destroy();
+    } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; }
+  });
+
+  it('selects the first scanner automatically and allows changing it', async () => {
+    const scanner = TestBed.inject(ScannerService);
+    vi.spyOn(scanner, 'devices').mockResolvedValue([{ id: 'first', name: 'First' }, { id: 'second', name: 'Second' }]);
+    vi.spyOn(scanner, 'scan').mockResolvedValue(new File(['jpeg'], 'page.jpg', { type: 'image/jpeg' }));
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    element.querySelector<HTMLButtonElement>('.attach-button')!.click(); fixture.detectChanges();
+    [...element.querySelectorAll<HTMLButtonElement>('.attachment-menu button')].find((button) => button.textContent?.includes('Scan Document'))!.click();
+    await fixture.whenStable(); fixture.detectChanges();
+    const select = element.querySelector<HTMLSelectElement>('#scanner-device')!;
+    expect(select.value).toBe('first');
+    select.value = 'second'; select.dispatchEvent(new Event('change')); fixture.detectChanges();
+    element.querySelector<HTMLButtonElement>('.scan-action')!.click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(scanner.scan).toHaveBeenCalledWith('second');
+    fixture.destroy();
+  });
+
+  it('previews, zooms, and applies a crop to the scanned page', async () => {
+    const scanner = TestBed.inject(ScannerService);
+    vi.spyOn(scanner, 'devices').mockResolvedValue([{ id: 'first', name: 'Flatbed' }]);
+    vi.spyOn(scanner, 'scan').mockResolvedValue(new File(['original'], 'page.jpg', { type: 'image/jpeg' }));
+    const create = URL.createObjectURL, revoke = URL.revokeObjectURL, OriginalImage = window.Image;
+    URL.createObjectURL = vi.fn(() => 'blob:scan'); URL.revokeObjectURL = vi.fn();
+    const drawImage = vi.fn(), translate = vi.fn(), rotate = vi.fn();
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage, translate, rotate } as unknown as CanvasRenderingContext2D);
+    const toBlob = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => callback(new Blob(['cropped'], { type: 'image/jpeg' })));
+    class FakeImage {
+      naturalWidth = 1000; naturalHeight = 800;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal('Image', FakeImage);
+    try {
+      const fixture = TestBed.createComponent(DispatchPage);
+      fixture.detectChanges(); await fixture.whenStable();
+      const element = fixture.nativeElement as HTMLElement;
+      element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.attach-button')!.click(); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.attachment-menu button')].find((button) => button.textContent?.includes('Scan Document'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.scan-action')!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.scan-page .scan-link')!.click(); fixture.detectChanges();
+      const zoom = element.querySelector<HTMLInputElement>('[aria-label="Preview zoom"]')!;
+      element.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!.click(); fixture.detectChanges();
+      expect(zoom.value).toBe('125');
+      element.querySelector<HTMLButtonElement>('[aria-label="Zoom out"]')!.click(); fixture.detectChanges();
+      expect(zoom.value).toBe('100');
+      zoom.value = '200'; zoom.dispatchEvent(new Event('input')); fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-editor-image')!.style.width).toBe('200%');
+      const left = element.querySelector<HTMLButtonElement>('[aria-label="Adjust crop left edge"]')!;
+      const image = element.querySelector<HTMLElement>('.scan-editor-image')!;
+      vi.spyOn(image, 'getBoundingClientRect').mockReturnValue({ width: 1000, height: 800 } as DOMRect);
+      left.setPointerCapture = vi.fn();
+      const pointer = (type: string, x: number) => Object.assign(new Event(type), { pointerId: 1, button: 0, clientX: x, clientY: 0 });
+      left.dispatchEvent(pointer('pointerdown', 0));
+      left.dispatchEvent(pointer('pointermove', 100));
+      fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-image-mask')!.style.clipPath).toBe('inset(0% 0% 0% 0%)');
+      left.dispatchEvent(pointer('pointerup', 100));
+      fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-crop-selection')!.style.left).toBe('10%');
+      expect(element.querySelector<HTMLElement>('.scan-image-mask')!.style.clipPath).toBe('inset(0% 0% 0% 10%)');
+      element.querySelector<HTMLButtonElement>('[aria-label="Rotate right"]')!.click(); fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-crop-selection')!.style.top).toBe('10%');
+      expect(element.querySelector<HTMLImageElement>('.scan-editor-image img')!.style.transform).toContain('rotate(90deg)');
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-editor-actions button')].find((button) => button.textContent?.includes('Apply crop'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(translate).toHaveBeenNthCalledWith(1, -0, -100);
+      expect(translate).toHaveBeenNthCalledWith(2, 800, 0);
+      expect(rotate).toHaveBeenCalledWith(Math.PI / 2);
+      expect(drawImage).toHaveBeenCalledWith(expect.any(FakeImage), 0, 0);
+      expect(element.querySelector('.scan-editor')).toBeNull();
+      const format = element.querySelector<HTMLSelectElement>('[aria-label="Scan output format"]')!;
+      format.value = 'jpeg'; format.dispatchEvent(new Event('change')); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-footer button')].find((button) => button.textContent?.includes('Add to message'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(element.querySelector('.attachment-preview')?.textContent).toContain('page-01.jpg');
+      fixture.destroy();
+    } finally {
+      getContext.mockRestore(); toBlob.mockRestore();
+      vi.stubGlobal('Image', OriginalImage); URL.createObjectURL = create; URL.revokeObjectURL = revoke;
     }
   });
 

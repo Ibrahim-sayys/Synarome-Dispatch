@@ -1,5 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { ReactiveFormsModule, NonNullableFormBuilder } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
@@ -8,7 +7,7 @@ import { Customer, CustomersService } from '../../core/customers.service';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
 import { MessageThread } from '../../shared/message-thread/message-thread';
-import { ScannerDevice, ScannerService, scannedPagesToPdf, scannedPageToPng } from '../../core/scanner.service';
+import { ScannerDevice, ScannerService, cropBounds, scanFileName, scannedPagesToPdf, scannedPageToPng } from '../../core/scanner.service';
 
 interface ExtraRecipient { kind: 'marketing_person' | 'customer'; id: number; name: string; phone: string; }
 
@@ -39,7 +38,6 @@ export class DispatchPage implements OnInit, OnDestroy {
   protected readonly selectedImageUrl = signal<string | null>(null);
   protected readonly isImagePreviewOpen = signal(false);
   protected readonly previewUrl = signal<string | null>(null);
-  protected readonly previewPdfUrl = signal<SafeResourceUrl | null>(null);
   protected readonly previewName = signal('');
   protected readonly attachmentMenuOpen = signal(false);
   protected readonly scanHelpOpen = signal(false);
@@ -48,6 +46,27 @@ export class DispatchPage implements OnInit, OnDestroy {
   protected readonly scanPages = signal<File[]>([]);
   protected readonly scanBusy = signal(false);
   protected readonly scanError = signal('');
+  protected readonly editingPage = signal<number | null>(null);
+  protected readonly previewZoom = signal(100);
+  protected readonly previewAspect = signal(1);
+  protected readonly previewRotation = signal(0);
+  protected readonly rotatedAspect = computed(() => this.previewRotation() % 180 ? 1 / this.previewAspect() : this.previewAspect());
+  protected readonly panning = signal(false);
+  private panDrag: { pointerId: number; x: number; y: number; left: number; top: number } | null = null;
+  protected readonly cropLeft = signal(0);
+  protected readonly cropRight = signal(0);
+  protected readonly cropTop = signal(0);
+  protected readonly cropBottom = signal(0);
+  protected readonly visibleCrop = signal({ left: 0, right: 0, top: 0, bottom: 0 });
+  protected readonly cropError = signal('');
+  protected readonly cropHandles = [
+    { name: 'top', label: 'top edge' }, { name: 'right', label: 'right edge' },
+    { name: 'bottom', label: 'bottom edge' }, { name: 'left', label: 'left edge' },
+    { name: 'top-left', label: 'top left corner' }, { name: 'top-right', label: 'top right corner' },
+    { name: 'bottom-left', label: 'bottom left corner' }, { name: 'bottom-right', label: 'bottom right corner' },
+  ];
+  private cropDrag: { pointerId: number; edge: string; x: number; y: number; width: number; height: number; left: number; right: number; top: number; bottom: number } | null = null;
+
   protected readonly scanFormat = signal<'pdf' | 'jpeg' | 'png'>('pdf');
   private scanGeneration = 0;
   protected readonly sending = signal(false);
@@ -82,17 +101,27 @@ export class DispatchPage implements OnInit, OnDestroy {
   private readonly dispatchService = inject(CustomerDispatchService);
   private readonly historyService = inject(DispatchService);
   private readonly builder = inject(NonNullableFormBuilder);
-  private readonly sanitizer = inject(DomSanitizer);
   private readonly scanner = inject(ScannerService);
   private readonly searchInput = new Subject<string>();
   private readonly pickerSearchInput = new Subject<string>();
   private readonly messageInput = viewChild<ElementRef<HTMLTextAreaElement>>('messageInput');
+  private readonly attachmentButton = viewChild<ElementRef<HTMLButtonElement>>('attachmentButton');
+  private readonly attachmentMenu = viewChild<ElementRef<HTMLElement>>('attachmentMenu');
   private searchSubscription?: Subscription;
   private listSubscription?: Subscription;
   private pickerSearchSubscription?: Subscription;
   private pickerListSubscription?: Subscription;
   private threadSubscription?: Subscription;
   protected readonly form = this.builder.group({ message_text: [''] });
+
+  @HostListener('document:click', ['$event'])
+  protected closeAttachmentMenuOnOutsideClick(event: MouseEvent): void {
+    const target = event.target;
+    if (this.attachmentMenuOpen() && target instanceof Node &&
+        !this.attachmentButton()?.nativeElement.contains(target) && !this.attachmentMenu()?.nativeElement.contains(target)) {
+      this.attachmentMenuOpen.set(false);
+    }
+  }
 
   ngOnInit(): void {
     this.searchSubscription = this.searchInput.pipe(debounceTime(250), distinctUntilChanged()).subscribe((value) => {
@@ -255,11 +284,12 @@ export class DispatchPage implements OnInit, OnDestroy {
 
   protected openScanner(): void {
     this.attachmentMenuOpen.set(false); this.scanHelpOpen.set(true); this.scanError.set('');
+    void this.findScanners();
   }
 
   protected closeScanner(): void {
     this.scanGeneration++; this.scanHelpOpen.set(false); this.scanBusy.set(false);
-    this.scanPages.set([]); this.scanDevices.set([]); this.scanDeviceId.set(''); this.scanError.set('');
+    this.closePreview(); this.scanPages.set([]); this.scanDevices.set([]); this.scanDeviceId.set(''); this.scanError.set('');
   }
 
   protected async findScanners(): Promise<void> {
@@ -268,7 +298,8 @@ export class DispatchPage implements OnInit, OnDestroy {
     try {
       const devices = await this.scanner.devices();
       if (generation !== this.scanGeneration) return;
-      this.scanDevices.set(devices); this.scanDeviceId.set(devices[0]?.id || '');
+      const selected = devices.some((device) => device.id === this.scanDeviceId()) ? this.scanDeviceId() : devices[0]?.id || '';
+      this.scanDevices.set(devices); this.scanDeviceId.set(selected);
       if (!devices.length) this.scanError.set('No scanners found. Check the Windows scanner driver and connection.');
     } catch (error) {
       if (generation === this.scanGeneration) this.scanError.set(error instanceof Error ? error.message : 'Unable to find scanners.');
@@ -282,7 +313,7 @@ export class DispatchPage implements OnInit, OnDestroy {
     this.scanBusy.set(true); this.scanError.set('');
     try {
       const page = await this.scanner.scan(this.scanDeviceId());
-      if (generation === this.scanGeneration) this.scanPages.update((pages) => [...pages, page]);
+      if (generation === this.scanGeneration) this.scanPages.update((pages) => [...pages, new File([page], scanFileName('jpg', pages.length + 1), { type: 'image/jpeg' })]);
     } catch (error) {
       if (generation === this.scanGeneration) this.scanError.set(error instanceof Error ? error.message : 'Unable to scan the page.');
     } finally { if (generation === this.scanGeneration) this.scanBusy.set(false); }
@@ -320,16 +351,171 @@ export class DispatchPage implements OnInit, OnDestroy {
   protected previewFile(file: File): void {
     this.closePreview();
     const url = URL.createObjectURL(file);
+    if (file.type === 'application/pdf') {
+      window.open(url, '_blank', 'noopener');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return;
+    }
     this.previewUrl.set(url);
     this.previewName.set(file.name);
-    this.previewPdfUrl.set(file.type === 'application/pdf' ? this.sanitizer.bypassSecurityTrustResourceUrl(url) : null);
     this.isImagePreviewOpen.set(true);
+  }
+
+  protected previewScanPage(index: number): void {
+    const page = this.scanPages()[index];
+    if (!page) return;
+    this.previewFile(page);
+    this.editingPage.set(index);
+    this.previewName.set(`Page ${index + 1}`);
+    this.resetCrop();
+  }
+
+  protected imageLoaded(event: Event): void {
+    const image = event.target as HTMLImageElement;
+    if (image.naturalWidth && image.naturalHeight) this.previewAspect.set(image.naturalWidth / image.naturalHeight);
+  }
+
+  protected rotatePreview(direction: -1 | 1): void {
+    const left = this.cropLeft(), right = this.cropRight(), top = this.cropTop(), bottom = this.cropBottom();
+    this.previewRotation.update((rotation) => (rotation + direction * 90 + 360) % 360);
+    if (direction === 1) {
+      this.cropLeft.set(bottom); this.cropRight.set(top); this.cropTop.set(left); this.cropBottom.set(right);
+    } else {
+      this.cropLeft.set(top); this.cropRight.set(bottom); this.cropTop.set(right); this.cropBottom.set(left);
+    }
+    this.updateVisibleCrop();
+  }
+
+  protected adjustZoom(amount: number): void {
+    this.previewZoom.update((zoom) => Math.max(100, Math.min(300, zoom + amount)));
+  }
+
+  protected startPan(event: PointerEvent): void {
+    if (this.previewZoom() <= 100 || event.button !== 0 || (event.target as Element).closest('.crop-handle')) return;
+    const viewport = event.currentTarget as HTMLElement;
+    this.panDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+    viewport.setPointerCapture(event.pointerId);
+    this.panning.set(true);
+    event.preventDefault();
+  }
+
+  protected movePan(event: PointerEvent): void {
+    const drag = this.panDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const viewport = event.currentTarget as HTMLElement;
+    viewport.scrollLeft = drag.left - (event.clientX - drag.x);
+    viewport.scrollTop = drag.top - (event.clientY - drag.y);
+  }
+
+  protected endPan(event: PointerEvent): void {
+    if (this.panDrag?.pointerId === event.pointerId) { this.panDrag = null; this.panning.set(false); }
+  }
+
+  protected startCropDrag(event: PointerEvent, edge: string): void {
+    if (this.scanBusy() || event.button !== 0) return;
+    const handle = event.currentTarget as HTMLElement;
+    const image = handle.closest('.scan-editor-image');
+    if (!image) return;
+    const rect = image.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    event.preventDefault();
+    this.cropDrag = { pointerId: event.pointerId, edge, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height,
+      left: this.cropLeft(), right: this.cropRight(), top: this.cropTop(), bottom: this.cropBottom() };
+    handle.setPointerCapture(event.pointerId);
+  }
+
+  protected moveCropDrag(event: PointerEvent): void {
+    const drag = this.cropDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = (event.clientX - drag.x) * 100 / drag.width;
+    const dy = (event.clientY - drag.y) * 100 / drag.height;
+    this.setCropEdges(drag.edge, drag.left + dx, drag.right - dx, drag.top + dy, drag.bottom - dy);
+  }
+
+  protected endCropDrag(event: PointerEvent): void {
+    if (this.cropDrag?.pointerId === event.pointerId) { this.cropDrag = null; this.updateVisibleCrop(); }
+  }
+
+  protected cropHandleKey(event: KeyboardEvent, edge: string): void {
+    const dx = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+    const dy = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+    if ((!dx && !dy) || this.scanBusy()) return;
+    event.preventDefault();
+    this.setCropEdges(edge, this.cropLeft() + dx, this.cropRight() - dx, this.cropTop() + dy, this.cropBottom() - dy);
+    this.updateVisibleCrop();
+  }
+
+  private updateVisibleCrop(): void {
+    this.visibleCrop.set({ left: this.cropLeft(), right: this.cropRight(), top: this.cropTop(), bottom: this.cropBottom() });
+  }
+
+  private setCropEdges(edge: string, left: number, right: number, top: number, bottom: number): void {
+    const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
+    if (edge.includes('left')) this.cropLeft.set(clamp(left, 95 - this.cropRight()));
+    if (edge.includes('right')) this.cropRight.set(clamp(right, 95 - this.cropLeft()));
+    if (edge.includes('top')) this.cropTop.set(clamp(top, 95 - this.cropBottom()));
+    if (edge.includes('bottom')) this.cropBottom.set(clamp(bottom, 95 - this.cropTop()));
+  }
+
+  protected resetCrop(): void {
+    this.cropDrag = null;
+    this.cropLeft.set(0); this.cropRight.set(0); this.cropTop.set(0); this.cropBottom.set(0); this.cropError.set('');
+    this.updateVisibleCrop();
+  }
+
+  protected async applyCrop(): Promise<void> {
+    const index = this.editingPage();
+    if (index === null || this.scanBusy()) return;
+    const file = this.scanPages()[index];
+    if (!file) return;
+    const left = this.cropLeft(), right = this.cropRight(), top = this.cropTop(), bottom = this.cropBottom();
+    const rotation = this.previewRotation();
+    if (left + right + top + bottom === 0 && rotation === 0) { this.closePreview(); return; }
+    if (left + right >= 100 || top + bottom >= 100) { this.cropError.set('Leave some of the page visible to crop.'); return; }
+    const generation = this.scanGeneration;
+    this.scanBusy.set(true); this.cropError.set('');
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Cannot open image')); image.src = objectUrl; });
+      const rotatedWidth = rotation % 180 ? image.naturalHeight : image.naturalWidth;
+      const rotatedHeight = rotation % 180 ? image.naturalWidth : image.naturalHeight;
+      const bounds = cropBounds(rotatedWidth, rotatedHeight, left, right, top, bottom);
+      const canvas = document.createElement('canvas');
+      canvas.width = bounds.width; canvas.height = bounds.height;
+      const context = canvas.getContext('2d');
+      if (!context || canvas.width < 1 || canvas.height < 1) throw new Error('Invalid crop');
+      if (rotation === 0) {
+        context.drawImage(image, bounds.x, bounds.y, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+      } else {
+        context.translate(-bounds.x, -bounds.y);
+        if (rotation === 90) context.translate(rotatedWidth, 0);
+        else if (rotation === 180) context.translate(rotatedWidth, rotatedHeight);
+        else context.translate(0, rotatedHeight);
+        context.rotate(rotation * Math.PI / 180);
+        context.drawImage(image, 0, 0);
+      }
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      if (!blob) throw new Error('Cannot save crop');
+      if (generation !== this.scanGeneration || this.editingPage() !== index || this.scanPages()[index] !== file) return;
+      if (blob.size > 5 * 1024 * 1024) throw new Error('Cropped image exceeds 5 MB');
+      const cropped = new File([blob], file.name, { type: 'image/jpeg' });
+      this.scanPages.update((pages) => pages.map((page, i) => i === index ? cropped : page));
+      this.closePreview();
+    } catch {
+      if (generation === this.scanGeneration) this.cropError.set('Could not crop this page. Try a smaller selection or keep the original.');
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+      if (generation === this.scanGeneration) this.scanBusy.set(false);
+    }
   }
 
   protected closePreview(): void {
     const url = this.previewUrl();
     if (url) URL.revokeObjectURL(url);
-    this.previewUrl.set(null); this.previewPdfUrl.set(null); this.isImagePreviewOpen.set(false);
+    this.previewUrl.set(null); this.isImagePreviewOpen.set(false);
+    this.panDrag = null; this.panning.set(false); this.previewAspect.set(1); this.previewRotation.set(0);
+    this.editingPage.set(null); this.previewZoom.set(100); this.resetCrop();
   }
 
   protected removeFile(index = 0): void {

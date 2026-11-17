@@ -254,6 +254,22 @@ describe('Customer dispatch flow', () => {
     fixture.destroy();
   });
 
+  it('closes the attachment menu on an outside click', async () => {
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    const button = element.querySelector<HTMLButtonElement>('.attach-button')!;
+    button.click(); fixture.detectChanges();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    element.querySelector<HTMLElement>('.attachment-menu')!.click(); fixture.detectChanges();
+    expect(element.querySelector('.attachment-menu')).not.toBeNull();
+    document.body.click(); fixture.detectChanges();
+    expect(element.querySelector('.attachment-menu')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    fixture.destroy();
+  });
+
   it('discovers a scanner and adds a scanned JPEG to the draft', async () => {
     const scanner = TestBed.inject(ScannerService);
     vi.spyOn(scanner, 'devices').mockResolvedValue([{ id: 'scanner-1', name: 'Flatbed' }]);
@@ -269,8 +285,8 @@ describe('Customer dispatch flow', () => {
       element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
       element.querySelector<HTMLButtonElement>('.attach-button')!.click(); fixture.detectChanges();
       [...element.querySelectorAll<HTMLButtonElement>('.attachment-menu button')].find((button) => button.textContent?.includes('Scan Document'))!.click(); fixture.detectChanges();
-      [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Find scanners'))!.click();
       await fixture.whenStable(); fixture.detectChanges();
+      expect(scanner.devices).toHaveBeenCalledTimes(1);
       expect(element.querySelector('.scan-help select')?.textContent).toContain('Flatbed');
       [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Scan page'))!.click();
       await fixture.whenStable(); fixture.detectChanges();
@@ -278,10 +294,99 @@ describe('Customer dispatch flow', () => {
       format.value = 'jpeg'; format.dispatchEvent(new Event('change', { bubbles: true })); fixture.detectChanges();
       [...element.querySelectorAll<HTMLButtonElement>('.scan-help button')].find((button) => button.textContent?.includes('Add to message'))!.click();
       await fixture.whenStable(); fixture.detectChanges();
-      expect(element.querySelector('.attachment-preview')?.textContent).toContain('scan.jpg');
+      expect(element.querySelector('.attachment-preview')?.textContent).toMatch(/Scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}-page-01\.jpg/);
       expect(scanner.scan).toHaveBeenCalledWith('scanner-1');
       fixture.destroy();
     } finally { URL.createObjectURL = create; URL.revokeObjectURL = revoke; }
+  });
+
+  it('selects the first scanner automatically and allows changing it', async () => {
+    const scanner = TestBed.inject(ScannerService);
+    vi.spyOn(scanner, 'devices').mockResolvedValue([{ id: 'first', name: 'First' }, { id: 'second', name: 'Second' }]);
+    vi.spyOn(scanner, 'scan').mockResolvedValue(new File(['jpeg'], 'page.jpg', { type: 'image/jpeg' }));
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+    element.querySelector<HTMLButtonElement>('.attach-button')!.click(); fixture.detectChanges();
+    [...element.querySelectorAll<HTMLButtonElement>('.attachment-menu button')].find((button) => button.textContent?.includes('Scan Document'))!.click();
+    await fixture.whenStable(); fixture.detectChanges();
+    const select = element.querySelector<HTMLSelectElement>('#scanner-device')!;
+    expect(select.value).toBe('first');
+    select.value = 'second'; select.dispatchEvent(new Event('change')); fixture.detectChanges();
+    element.querySelector<HTMLButtonElement>('.scan-action')!.click();
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(scanner.scan).toHaveBeenCalledWith('second');
+    fixture.destroy();
+  });
+
+  it('previews, zooms, and applies a crop to the scanned page', async () => {
+    const scanner = TestBed.inject(ScannerService);
+    vi.spyOn(scanner, 'devices').mockResolvedValue([{ id: 'first', name: 'Flatbed' }]);
+    vi.spyOn(scanner, 'scan').mockResolvedValue(new File(['original'], 'page.jpg', { type: 'image/jpeg' }));
+    const create = URL.createObjectURL, revoke = URL.revokeObjectURL, OriginalImage = window.Image;
+    URL.createObjectURL = vi.fn(() => 'blob:scan'); URL.revokeObjectURL = vi.fn();
+    const drawImage = vi.fn(), translate = vi.fn(), rotate = vi.fn();
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage, translate, rotate } as unknown as CanvasRenderingContext2D);
+    const toBlob = vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => callback(new Blob(['cropped'], { type: 'image/jpeg' })));
+    class FakeImage {
+      naturalWidth = 1000; naturalHeight = 800;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) { queueMicrotask(() => this.onload?.()); }
+    }
+    vi.stubGlobal('Image', FakeImage);
+    try {
+      const fixture = TestBed.createComponent(DispatchPage);
+      fixture.detectChanges(); await fixture.whenStable();
+      const element = fixture.nativeElement as HTMLElement;
+      element.querySelector<HTMLButtonElement>('.customer-choice')!.click(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.attach-button')!.click(); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.attachment-menu button')].find((button) => button.textContent?.includes('Scan Document'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.scan-action')!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      element.querySelector<HTMLButtonElement>('.scan-page .scan-link')!.click(); fixture.detectChanges();
+      const zoom = element.querySelector<HTMLInputElement>('[aria-label="Preview zoom"]')!;
+      element.querySelector<HTMLButtonElement>('[aria-label="Zoom in"]')!.click(); fixture.detectChanges();
+      expect(zoom.value).toBe('125');
+      element.querySelector<HTMLButtonElement>('[aria-label="Zoom out"]')!.click(); fixture.detectChanges();
+      expect(zoom.value).toBe('100');
+      zoom.value = '200'; zoom.dispatchEvent(new Event('input')); fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-editor-image')!.style.width).toBe('200%');
+      const left = element.querySelector<HTMLButtonElement>('[aria-label="Adjust crop left edge"]')!;
+      const image = element.querySelector<HTMLElement>('.scan-editor-image')!;
+      vi.spyOn(image, 'getBoundingClientRect').mockReturnValue({ width: 1000, height: 800 } as DOMRect);
+      left.setPointerCapture = vi.fn();
+      const pointer = (type: string, x: number) => Object.assign(new Event(type), { pointerId: 1, button: 0, clientX: x, clientY: 0 });
+      left.dispatchEvent(pointer('pointerdown', 0));
+      left.dispatchEvent(pointer('pointermove', 100));
+      fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-image-mask')!.style.clipPath).toBe('inset(0% 0% 0% 0%)');
+      left.dispatchEvent(pointer('pointerup', 100));
+      fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-crop-selection')!.style.left).toBe('10%');
+      expect(element.querySelector<HTMLElement>('.scan-image-mask')!.style.clipPath).toBe('inset(0% 0% 0% 10%)');
+      element.querySelector<HTMLButtonElement>('[aria-label="Rotate right"]')!.click(); fixture.detectChanges();
+      expect(element.querySelector<HTMLElement>('.scan-crop-selection')!.style.top).toBe('10%');
+      expect(element.querySelector<HTMLImageElement>('.scan-editor-image img')!.style.transform).toContain('rotate(90deg)');
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-editor-actions button')].find((button) => button.textContent?.includes('Apply crop'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(translate).toHaveBeenNthCalledWith(1, -0, -100);
+      expect(translate).toHaveBeenNthCalledWith(2, 800, 0);
+      expect(rotate).toHaveBeenCalledWith(Math.PI / 2);
+      expect(drawImage).toHaveBeenCalledWith(expect.any(FakeImage), 0, 0);
+      expect(element.querySelector('.scan-editor')).toBeNull();
+      const format = element.querySelector<HTMLSelectElement>('[aria-label="Scan output format"]')!;
+      format.value = 'jpeg'; format.dispatchEvent(new Event('change')); fixture.detectChanges();
+      [...element.querySelectorAll<HTMLButtonElement>('.scan-footer button')].find((button) => button.textContent?.includes('Add to message'))!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(element.querySelector('.attachment-preview')?.textContent).toContain('page-01.jpg');
+      fixture.destroy();
+    } finally {
+      getContext.mockRestore(); toBlob.mockRestore();
+      vi.stubGlobal('Image', OriginalImage); URL.createObjectURL = create; URL.revokeObjectURL = revoke;
+    }
   });
 
   it('shows compact pagination and requests the next customer page', async () => {

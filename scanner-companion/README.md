@@ -4,8 +4,8 @@ This companion runs on the Windows computer connected to the scanner. It require
 
 1. Copy this entire directory to the Windows computer. Install Python 3 and the scanner's Windows WIA driver, and check the scanner works in Windows Scan.
 2. Double-click **Start Scanner.bat**. The first time, enter the exact HTTPS website address you use for Synarome Dispatch and select OK. The companion saves the website address in your Windows user profile and uses it on future starts. Leave the companion running while scanning. Only run one copy at a time.
-3. Open that same website on the Windows computer. In the Dispatch composer, choose **Attach > Scan Document**, then **Find scanners**. Allow browser local network access if prompted.
-4. Select a scanner, place a page on the flatbed, and choose **Scan page**. Repeat for further pages. Preview or remove pages, select PDF/JPEG/PNG, and add them to the draft. Review the draft and recipients before sending.
+3. Open that same website on the Windows computer. In the Dispatch composer, choose **Attach > Scan Document**. The app looks for scanners and selects the first one automatically; select another from the list if needed. Use **Refresh** to search again. Allow browser local network access if prompted.
+4. Select a scanner, place a page on the flatbed, and choose **Scan page**. Repeat for further pages. Use **Preview & crop** to zoom or trim the edges of individual pages, or remove a page. Select PDF/JPEG/PNG, and add them to the draft. Review the draft and recipients before sending.
 5. If started with the visible batch file, close its window when finished. Closing the scan dialog discards the draft scan; it does not necessarily stop a scan already running on the device.
 
 For a background start, put a shortcut to **Start Scanner Silently.vbs** in `shell:startup` instead of the batch file. It starts the same companion without showing its console. Keep all companion files together. To stop a silently started companion, use Windows Task Manager to end its Python process; to troubleshoot startup, run **Start Scanner.bat** directly to see any errors.

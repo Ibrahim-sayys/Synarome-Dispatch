@@ -42,44 +42,57 @@
         @if (selectedFile(); as file) {
           <div class="attachment-preview" [class.has-image]="selectedImageUrl()">
             @if (selectedImageUrl(); as imageUrl) { <button type="button" class="attachment-image-button" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name"><img [src]="imageUrl" [alt]="'Selected image: ' + file.name" /></button> }
-            @else { <button type="button" class="secondary" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name">Preview PDF</button> }
+            @else { <button type="button" class="attachment-preview-button" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><span>Preview PDF</span></button> }
             <div class="attachment-details"><strong>{{ file.name }}</strong><small>{{ selectedImageUrl() ? 'Preview selected image before sending' : 'PDF selected for dispatch' }}</small></div>
             <button type="button" class="remove-attachment" [disabled]="sending()" (click)="removeFile()" aria-label="Remove attachment">&times;</button>
           </div>
         }
         @for (file of selectedFiles().slice(1); track $index) {
-          <div class="attachment-preview"><button type="button" class="secondary" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name">Preview</button><div class="attachment-details"><strong>{{ file.name }}</strong><small>Ready to send</small></div><button type="button" class="remove-attachment" [disabled]="sending()" (click)="removeFile($index + 1)" [attr.aria-label]="'Remove ' + file.name">&times;</button></div>
+          <div class="attachment-preview"><button type="button" class="attachment-preview-button" (click)="previewFile(file)" [disabled]="sending()" [attr.aria-label]="'Preview ' + file.name"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><span>Preview</span></button><div class="attachment-details"><strong>{{ file.name }}</strong><small>Ready to send</small></div><button type="button" class="remove-attachment" [disabled]="sending()" (click)="removeFile($index + 1)" [attr.aria-label]="'Remove ' + file.name">&times;</button></div>
         }
-        <div class="composer-row"><input #attachmentInput class="file-input" type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="setFile($event)" [disabled]="sending()" /><button type="button" class="attach-button" aria-label="Attach file" title="Attach image or PDF" (click)="attachmentMenuOpen.set(!attachmentMenuOpen())" [attr.aria-expanded]="attachmentMenuOpen()" [disabled]="sending()">📎</button>@if (attachmentMenuOpen()) { <div class="attachment-menu"><button type="button" (click)="attachmentMenuOpen.set(false); attachmentInput.click()">Browse Files</button><button type="button" (click)="openScanner()">Scan Document</button></div> }<div class="message-input-shell"><textarea #messageInput formControlName="message_text" [attr.maxlength]="selectedFile() ? 1024 : 4096" rows="1" placeholder="Write your dispatch message…" aria-label="Dispatch message" [readonly]="sending()" (input)="resizeMessageInput(messageInput)"></textarea></div><button type="submit" class="send-button" [disabled]="sending() || !mode() || (!form.getRawValue().message_text.trim() && !selectedFile())" [attr.aria-label]="sending() ? 'Sending' : 'Send message'">{{ sending() ? '...' : '➤' }}</button></div>
+        <div class="composer-row"><input #attachmentInput class="file-input" type="file" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" (change)="setFile($event)" [disabled]="sending()" /><button #attachmentButton type="button" class="attach-button" aria-label="Attach file" title="Attach image or PDF" (click)="attachmentMenuOpen.set(!attachmentMenuOpen())" [attr.aria-expanded]="attachmentMenuOpen()" [disabled]="sending()">📎</button>@if (attachmentMenuOpen()) { <div #attachmentMenu class="attachment-menu"><button type="button" (click)="attachmentMenuOpen.set(false); attachmentInput.click()">Browse Files</button><button type="button" (click)="openScanner()">Scan Document</button></div> }<div class="message-input-shell"><textarea #messageInput formControlName="message_text" [attr.maxlength]="selectedFile() ? 1024 : 4096" rows="1" placeholder="Write your dispatch message…" aria-label="Dispatch message" [readonly]="sending()" (input)="resizeMessageInput(messageInput)"></textarea></div><button type="submit" class="send-button" [disabled]="sending() || !mode() || (!form.getRawValue().message_text.trim() && !selectedFile())" [attr.aria-label]="sending() ? 'Sending' : 'Send message'">{{ sending() ? '...' : '➤' }}</button></div>
         <small class="composer-footnote">JPG, PNG or PDF · {{ selectedFiles().length }} attachment{{ selectedFiles().length === 1 ? '' : 's' }} · {{ recipientCount() }} recipient{{ recipientCount() === 1 ? '' : 's' }} selected</small>
       </form>
     }
   </div>
   @if (scanHelpOpen()) {
-    <div class="image-overlay"><div class="image-dialog scan-help" role="dialog" aria-modal="true" aria-label="Scan document">
-      <div class="image-dialog-header"><strong>Scan Document</strong><button type="button" (click)="closeScanner()" aria-label="Close scanner">&times;</button></div>
-      <p>Start the Windows scanner companion. Place a page on the scanner and scan each page in turn.</p>
-      <button type="button" class="secondary" (click)="findScanners()" [disabled]="scanBusy()">Find scanners</button>
-      @if (scanDevices().length) {
-        <label>Scanner <select [value]="scanDeviceId()" (change)="scanDeviceId.set($any($event.target).value)" [disabled]="scanBusy()">@for (device of scanDevices(); track device.id) { <option [value]="device.id">{{ device.name }}</option> }</select></label>
-        <button type="button" class="secondary" (click)="scanPage()" [disabled]="scanBusy() || !scanDeviceId()">{{ scanBusy() ? 'Working…' : 'Scan page' }}</button>
-      }
-      @if (scanError()) { <p class="compose-error" role="alert">{{ scanError() }}</p> }
-      @if (scanPages().length) {
-        <p>{{ scanPages().length }} page{{ scanPages().length === 1 ? '' : 's' }} scanned</p>
-        @for (page of scanPages(); track $index) { <div class="scan-page">Page {{ $index + 1 }} <button type="button" (click)="previewFile(page)">Preview</button><button type="button" (click)="removeScannedPage($index)" [disabled]="scanBusy()">Remove</button></div> }
-        <label>Save as <select [value]="scanFormat()" (change)="scanFormat.set($any($event.target).value)" [disabled]="scanBusy()"><option value="pdf">One PDF</option><option value="jpeg">JPEG images</option><option value="png">PNG images</option></select></label>
-        <button type="button" (click)="addScannedPages()" [disabled]="scanBusy()">Add to message</button>
-      }
-      <button type="button" class="secondary" (click)="closeScanner()">Cancel</button>
-    </div></div>
+    <div class="image-overlay"><section class="image-dialog scan-help" role="dialog" aria-modal="true" aria-labelledby="scan-title">
+      <div class="scan-header"><div><span class="scan-eyebrow">DOCUMENT CAPTURE</span><h2 id="scan-title">Scan a document</h2><p>Scan pages, review them, then add them to your message.</p></div><button type="button" class="scan-close" (click)="closeScanner()" aria-label="Close scanner">&times;</button></div>
+      <div class="scan-body">
+        <section class="scanner-card" aria-label="Scanner selection">
+          <div class="scanner-card-top"><div><span class="scan-step">01</span><strong>Scanner</strong></div><button type="button" class="scan-link" (click)="findScanners()" [disabled]="scanBusy()">Refresh</button></div>
+          @if (scanDevices().length) {
+            <label class="scan-select-label" for="scanner-device">{{ scanDevices().length === 1 ? 'Selected scanner' : 'Choose a scanner' }}</label>
+            <select id="scanner-device" [value]="scanDeviceId()" (change)="scanDeviceId.set($any($event.target).value)" [disabled]="scanBusy()">@for (device of scanDevices(); track device.id) { <option [value]="device.id">{{ device.name }}</option> }</select>
+            <p class="scan-hint">Place a page face down on the glass, then start scanning.</p>
+          } @else if (scanBusy()) { <p class="scan-hint" role="status">Looking for scanners…</p> }
+          @else { <p class="scan-hint">Start the Windows scanner companion and connect your scanner, then refresh.</p> }
+        </section>
+        @if (scanError()) { <p class="compose-error" role="alert">{{ scanError() }}</p> }
+        <section class="scan-pages-section" aria-label="Scanned pages">
+          <div class="scan-section-heading"><div><span class="scan-step">02</span><strong>Pages</strong><span class="scan-count">{{ scanPages().length }} / 20</span></div><button type="button" class="scan-action" (click)="scanPage()" [disabled]="scanBusy() || !scanDeviceId()">{{ scanBusy() ? 'Working…' : scanPages().length ? '+ Scan another page' : '+ Scan page' }}</button></div>
+          @if (!scanPages().length) { <div class="scan-empty"><span aria-hidden="true">▤</span><strong>No pages yet</strong><small>Your scanned pages will appear here.</small></div> }
+          @for (page of scanPages(); track $index) { <div class="scan-page"><span class="scan-page-icon" aria-hidden="true">▤</span><div class="scan-page-label"><strong>Page {{ $index + 1 }}</strong><small>Ready to review</small></div><button type="button" class="scan-link" (click)="previewScanPage($index)" [disabled]="scanBusy()">Preview &amp; crop</button><button type="button" class="scan-remove" (click)="removeScannedPage($index)" [disabled]="scanBusy()" [attr.aria-label]="'Remove page ' + ($index + 1)">&times;</button></div> }
+        </section>
+        @if (scanPages().length) { <section class="scan-format"><div><span class="scan-step">03</span><strong>Save as</strong><p class="scan-hint">PDF combines pages into one document. Images are attached separately.</p></div><select aria-label="Scan output format" [value]="scanFormat()" (change)="scanFormat.set($any($event.target).value)" [disabled]="scanBusy()"><option value="pdf">PDF document</option><option value="jpeg">JPEG images</option><option value="png">PNG images</option></select></section> }
+      </div>
+      <div class="scan-footer"><button type="button" class="scan-secondary" (click)="closeScanner()">Cancel</button><button type="button" class="scan-primary" (click)="addScannedPages()" [disabled]="scanBusy() || !scanPages().length">Add to message <span aria-hidden="true">→</span></button></div>
+    </section></div>
   }
   @if (isImagePreviewOpen() && previewUrl(); as url) {
     <div class="image-overlay">
-      <div class="image-dialog" role="dialog" aria-modal="true" [attr.aria-label]="'Preview ' + previewName()">
+      <div class="image-dialog" [class.scan-editor-dialog]="editingPage() !== null" role="dialog" aria-modal="true" [attr.aria-label]="'Preview ' + previewName()">
         <div class="image-dialog-header"><strong>{{ previewName() }}</strong><button type="button" (click)="closePreview()" aria-label="Close preview">&times;</button></div>
-        @if (previewPdfUrl(); as pdfUrl) { <iframe class="pdf-preview" [src]="pdfUrl" [title]="'Preview ' + previewName()"></iframe> }
-        @else { <img [src]="url" [alt]="'Selected image: ' + previewName()" /> }
+        @if (editingPage() !== null) {
+          <div class="scan-editor">
+            <div class="scan-editor-toolbar"><span>Drag the edges or corners to crop the page</span><div class="scan-editor-controls"><button type="button" class="scan-tool-button" aria-label="Rotate left" title="Rotate left" (click)="rotatePreview(-1)" [disabled]="scanBusy()">↶</button><button type="button" class="scan-tool-button" aria-label="Rotate right" title="Rotate right" (click)="rotatePreview(1)" [disabled]="scanBusy()">↷</button><label for="scan-zoom">Zoom</label><button type="button" class="scan-tool-button" aria-label="Zoom out" (click)="adjustZoom(-25)" [disabled]="previewZoom() <= 100">−</button><input id="scan-zoom" type="range" min="100" max="300" step="25" [value]="previewZoom()" (input)="previewZoom.set(+$any($event.target).value)" aria-label="Preview zoom" /><button type="button" class="scan-tool-button" aria-label="Zoom in" (click)="adjustZoom(25)" [disabled]="previewZoom() >= 300">+</button><strong>{{ previewZoom() }}%</strong></div></div>
+            <div class="scan-editor-viewport" [class.zoomed]="previewZoom() > 100" [class.panning]="panning()" (pointerdown)="startPan($event)" (pointermove)="movePan($event)" (pointerup)="endPan($event)" (pointercancel)="endPan($event)"><div class="scan-editor-fit" [style.max-width]="(rotatedAspect() * 62) + 'dvh'"><div class="scan-editor-image" [style.width.%]="previewZoom()" [style.aspect-ratio]="rotatedAspect()"><div class="scan-image-mask" [style.clip-path]="'inset(' + visibleCrop().top + '% ' + visibleCrop().right + '% ' + visibleCrop().bottom + '% ' + visibleCrop().left + '%)'"><img [src]="url" [alt]="'Preview ' + previewName()" [style.width.%]="previewRotation() % 180 ? previewAspect() * 100 : 100" [style.transform]="'translate(-50%, -50%) rotate(' + previewRotation() + 'deg)'" (load)="imageLoaded($event)" draggable="false" /></div><div class="scan-crop-selection" [style.left.%]="cropLeft()" [style.right.%]="cropRight()" [style.top.%]="cropTop()" [style.bottom.%]="cropBottom()">
+              @for (edge of cropHandles; track edge.name) { <button type="button" class="crop-handle" [class]="'crop-handle crop-handle-' + edge.name" [attr.aria-label]="'Adjust crop ' + edge.label" (pointerdown)="startCropDrag($event, edge.name)" (pointermove)="moveCropDrag($event)" (pointerup)="endCropDrag($event)" (pointercancel)="endCropDrag($event)" (keydown)="cropHandleKey($event, edge.name)"></button> }
+            </div></div></div></div>
+            @if (cropError()) { <p class="compose-error" role="alert">{{ cropError() }}</p> }
+            <div class="scan-editor-actions"><button type="button" class="scan-secondary" (click)="resetCrop()" [disabled]="scanBusy()">Reset edges</button><button type="button" class="scan-secondary" (click)="closePreview()" [disabled]="scanBusy()">Keep original</button><button type="button" class="scan-primary" (click)="applyCrop()" [disabled]="scanBusy()">Apply crop</button></div>
+          </div>
+        } @else { <img [src]="url" [alt]="'Selected image: ' + previewName()" /> }
       </div>
     </div>
   }

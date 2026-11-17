@@ -139,6 +139,11 @@
 .attachment-image-button { background: transparent; border: 0; cursor: zoom-in; flex: none; padding: 0; }
 .attachment-image-button img { border: 1px solid var(--border); border-radius: 7px; display: block; height: 104px; object-fit: cover; width: 138px; }
 .attachment-image-button:hover img { border-color: var(--primary); }
+.attachment-preview-button { align-items: center; background: var(--primary-soft); border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--primary); cursor: pointer; display: inline-flex; flex: none; font: inherit; font-size: .75rem; font-weight: 700; gap: 7px; padding: 10px 12px; transition: background .15s, border-color .15s; }
+.attachment-preview-button svg { fill: none; height: 17px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 17px; }
+.attachment-preview-button:hover:not(:disabled) { background: var(--surface); border-color: var(--primary); }
+.attachment-preview-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.attachment-preview-button:disabled { cursor: not-allowed; opacity: .5; }
 .pdf-icon { font-size: 1.6rem; }
 .attachment-details { display: flex; flex: 1; flex-direction: column; min-width: 0; }
 .attachment-details strong { color: var(--text-main); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -233,3 +238,71 @@
 .scan-help label { display: flex; flex-direction: column; gap: 5px; }
 .scan-help input, .scan-help select { padding: 8px; }
 .scan-page { align-items: center; display: flex; gap: 10px; }
+
+/* Scanner workflow */
+.scan-help { max-width: 620px; padding: 0; gap: 0; overflow: hidden; }
+.scan-header { align-items: flex-start; background: var(--primary-soft); display: flex; justify-content: space-between; padding: 24px 26px 22px; }
+.scan-header h2 { color: var(--text-main); font-size: 1.3rem; margin: 5px 0; }
+.scan-header p, .scan-hint { color: var(--text-muted); font-size: .8rem; line-height: 1.5; margin: 0; }
+.scan-eyebrow { color: var(--primary); font-size: .66rem; font-weight: 800; letter-spacing: .12em; }
+.scan-close { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 1.6rem; line-height: 1; }
+.scan-body { display: flex; flex-direction: column; gap: 18px; overflow-y: auto; padding: 22px 26px; }
+.scanner-card { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius-md); display: flex; flex-direction: column; gap: 9px; padding: 15px; }
+.scanner-card-top, .scan-section-heading, .scan-format, .scan-footer, .scan-editor-toolbar, .scan-editor-actions { align-items: center; display: flex; gap: 12px; justify-content: space-between; }
+.scanner-card-top > div, .scan-section-heading > div, .scan-format > div { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.scan-step { align-items: center; background: var(--primary-soft); border-radius: 50%; color: var(--primary); display: inline-flex; font-size: .66rem; font-weight: 800; height: 26px; justify-content: center; width: 26px; }
+.scan-select-label { color: var(--text-muted); font-size: .74rem; font-weight: 700; }
+.scan-help select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-main); font: inherit; font-size: .84rem; min-height: 40px; padding: 8px 34px 8px 10px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+.scan-link { background: transparent; border: 0; color: var(--primary); cursor: pointer; font: inherit; font-size: .78rem; font-weight: 700; padding: 6px; }
+.scan-link:disabled, .scan-action:disabled, .scan-primary:disabled, .scan-secondary:disabled { cursor: not-allowed; opacity: .5; }
+.scan-count { background: var(--surface-soft); border-radius: var(--radius-full); color: var(--text-muted); font-size: .7rem; padding: 4px 8px; }
+.scan-action, .scan-secondary, .scan-primary { border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; font: inherit; font-size: .8rem; font-weight: 700; padding: 10px 13px; }
+.scan-action { background: var(--primary-soft); border-color: var(--border-strong); color: var(--primary); }
+.scan-secondary { background: var(--surface); color: var(--text-main); }
+.scan-primary { background: var(--primary-gradient); border-color: transparent; color: white; }
+.scan-empty { align-items: center; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); color: var(--text-muted); display: flex; flex-direction: column; gap: 4px; margin-top: 12px; padding: 22px; }
+.scan-empty > span { color: var(--primary); font-size: 1.7rem; }
+.scan-empty strong { color: var(--text-main); font-size: .82rem; }
+.scan-empty small { font-size: .73rem; }
+.scan-page { border-bottom: 1px solid var(--border); gap: 10px; padding: 11px 0; }
+.scan-page-icon { align-items: center; background: var(--primary-soft); border-radius: var(--radius-sm); color: var(--primary); display: flex; font-size: 1.2rem; height: 40px; justify-content: center; width: 40px; }
+.scan-page-label { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.scan-page-label strong { font-size: .82rem; }
+.scan-page-label small { color: var(--text-muted); font-size: .72rem; }
+.scan-remove { background: transparent; border: 0; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; }
+.scan-format { align-items: flex-start; }
+.scan-format .scan-hint { flex-basis: 100%; margin-left: 34px; }
+.scan-footer { border-top: 1px solid var(--border); padding: 16px 26px; }
+.scan-editor-dialog { max-width: min(1200px, 100%); }
+.scan-editor { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; padding: 0 18px 18px; }
+.scan-editor-toolbar { color: var(--text-muted); flex-wrap: wrap; font-size: .78rem; }
+.scan-editor-toolbar label { align-items: center; display: flex; gap: 8px; }
+.scan-editor-controls { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.scan-tool-button { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-main); cursor: pointer; font-size: 1.1rem; height: 34px; width: 34px; }
+.scan-tool-button:disabled { cursor: not-allowed; opacity: .5; }
+.scan-editor-viewport { background: #252b34; border-radius: var(--radius-md); height: 62dvh; min-height: 180px; overflow: auto; }
+.scan-editor-viewport.zoomed { cursor: grab; touch-action: none; }
+.scan-editor-viewport.panning { cursor: grabbing; }
+.scan-editor-fit { margin: 0 auto; width: 100%; }
+.scan-editor-image { line-height: 0; overflow: hidden; position: relative; }
+.scan-image-mask { inset: 0; position: absolute; }
+.image-dialog .scan-editor-image img { display: block; height: auto; left: 50%; max-height: none; max-width: none; position: absolute; top: 50%; }
+.scan-crop-selection { border: 2px solid #e52424; box-shadow: 0 0 0 3000px rgb(0 0 0 / 55%); position: absolute; }
+.crop-handle { background: transparent; border: 0; padding: 0; position: absolute; touch-action: none; z-index: 1; }
+.crop-handle:focus-visible { outline: 2px solid #ffcd45; outline-offset: -2px; }
+.crop-handle::after { background: #e52424; border-radius: 2px; content: ''; position: absolute; }
+.crop-handle-top, .crop-handle-bottom { cursor: ns-resize; height: 24px; left: 24px; right: 24px; }
+.crop-handle-top { top: -2px; } .crop-handle-bottom { bottom: -2px; }
+.crop-handle-top::after, .crop-handle-bottom::after { height: 4px; left: calc(50% - 18px); top: 8px; width: 36px; }
+.crop-handle-left, .crop-handle-right { bottom: 24px; cursor: ew-resize; top: 24px; width: 24px; }
+.crop-handle-left { left: -2px; } .crop-handle-right { right: -2px; }
+.crop-handle-left::after, .crop-handle-right::after { height: 36px; left: 8px; top: calc(50% - 18px); width: 4px; }
+.crop-handle-top-left, .crop-handle-top-right, .crop-handle-bottom-left, .crop-handle-bottom-right { height: 28px; width: 28px; z-index: 2; }
+.crop-handle-top-left { cursor: nwse-resize; left: -2px; top: -2px; } .crop-handle-top-right { cursor: nesw-resize; right: -2px; top: -2px; }
+.crop-handle-bottom-left { bottom: -2px; cursor: nesw-resize; left: -2px; } .crop-handle-bottom-right { bottom: -2px; cursor: nwse-resize; right: -2px; }
+.crop-handle-top-left::after, .crop-handle-top-right::after, .crop-handle-bottom-left::after, .crop-handle-bottom-right::after { background: transparent; border: solid #e52424; border-width: 0; height: 16px; width: 16px; }
+.crop-handle-top-left::after { border-left-width: 4px; border-top-width: 4px; left: 0; top: 0; } .crop-handle-top-right::after { border-right-width: 4px; border-top-width: 4px; right: 0; top: 0; }
+.crop-handle-bottom-left::after { border-bottom-width: 4px; border-left-width: 4px; bottom: 0; left: 0; } .crop-handle-bottom-right::after { border-bottom-width: 4px; border-right-width: 4px; bottom: 0; right: 0; }
+.scan-editor-toolbar input { accent-color: var(--primary); min-width: 0; width: 120px; }
+.scan-editor-actions { justify-content: flex-end; }
+@media (max-width: 520px) { .scan-header, .scan-body, .scan-footer { padding-left: 16px; padding-right: 16px; } .scan-section-heading, .scan-format { align-items: stretch; flex-direction: column; } .scan-editor-actions { flex-wrap: wrap; } }

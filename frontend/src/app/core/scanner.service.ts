@@ -2,6 +2,19 @@ import { Injectable } from '@angular/core';
 
 export interface ScannerDevice { id: string; name: string; }
 
+/** Use local date and time so scan names are recognizable and distinct. */
+export function scanFileName(extension: 'jpg' | 'pdf', page?: number, date = new Date()): string {
+  const pad = (value: number, digits = 2) => String(value).padStart(digits, '0');
+  const timestamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}-${pad(date.getMilliseconds(), 3)}`;
+  return `Scan-${timestamp}${page === undefined ? '' : `-page-${pad(page)}`}.${extension}`;
+}
+
+/** Translate percentages from the preview into the source image's pixels. */
+export function cropBounds(width: number, height: number, left: number, right: number, top: number, bottom: number) {
+  const x = Math.round(width * left / 100), y = Math.round(height * top / 100);
+  return { x, y, width: Math.round(width * (100 - right) / 100) - x, height: Math.round(height * (100 - bottom) / 100) - y };
+}
+
 @Injectable({ providedIn: 'root' })
 export class ScannerService {
   private readonly base = 'http://127.0.0.1:17653';
@@ -34,7 +47,7 @@ export class ScannerService {
     const binary = atob(response.data);
     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     if (!bytes.length || bytes.length > 5 * 1024 * 1024) throw new Error('The scanned page is empty or exceeds 5 MB.');
-    return new File([bytes], `scan-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    return new File([bytes], scanFileName('jpg'), { type: 'image/jpeg' });
   }
 }
 
@@ -73,7 +86,7 @@ export async function scannedPagesToPdf(pages: File[]): Promise<File> {
   write(`xref\n0 ${offsets.length}\n0000000000 65535 f \n`);
   for (let i = 1; i < offsets.length; i++) write(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`);
   write(`trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
-  return new File(chunks as BlobPart[], `scan-${Date.now()}.pdf`, { type: 'application/pdf' });
+  return new File(chunks as BlobPart[], scanFileName('pdf'), { type: 'application/pdf' });
 }
 
 export async function scannedPageToPng(page: File): Promise<File> {

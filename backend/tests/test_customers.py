@@ -44,6 +44,60 @@ class CustomerDispatchTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         app.dependency_overrides.clear()
 
+    async def test_manual_retry_only_resends_failed_destination(self):
+        record = Dispatch(sender_id=self.user.id, send_mode="customer_dispatch", whatsapp_status="failed",
+                          actual_recipient="923001112222", recipient_kind="marketing_person",
+                          recipient_name="John", message_text="Original message", failure_reason="Rejected")
+        self.db.add(record)
+        self.db.commit()
+        calls = []
+
+        class FakeService:
+            def _configured(self, recipient):
+                pass
+
+            async def send_text(self, message, recipient):
+                calls.append((message, recipient))
+                if len(calls) == 1:
+                    raise WhatsAppError("Still rejected", 422)
+                return {"message_id": "wamid.retry"}
+
+        with patch.object(settings, "WHATSAPP_SEND_MODE", "live"), patch("app.api.v1.endpoints.customer_dispatch.WhatsAppService", FakeService):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                first = await client.post(f"/api/v1/customer-dispatch/{record.id}/retry")
+                self.assertEqual((first.json()["status"], first.json()["error"]), ("failed", "Still rejected"))
+                second = await client.post(f"/api/v1/customer-dispatch/{record.id}/retry")
+                self.assertEqual(second.json()["status"], "accepted")
+                third = await client.post(f"/api/v1/customer-dispatch/{record.id}/retry")
+                self.assertEqual(third.status_code, 409)
+        self.assertEqual(calls, [("Original message", "923001112222")] * 2)
+
+    async def test_retry_reuses_original_attachment(self):
+        with TemporaryDirectory() as directory:
+            from pathlib import Path
+            path = Path(directory) / "original.pdf"
+            path.write_bytes(b"%PDF-test\n%%EOF")
+            record = Dispatch(sender_id=self.user.id, send_mode="customer_dispatch", whatsapp_status="failed",
+                              actual_recipient="923001112222", recipient_kind="marketing_person", recipient_name="John",
+                              file_path=str(path), original_filename="bilty.pdf", message_text="caption")
+            self.db.add(record)
+            self.db.commit()
+            sent = []
+
+            class FakeService:
+                def _configured(self, recipient): pass
+                async def prepare_file(self, upload, caption, recipient):
+                    return PreparedMedia(await upload.read(), upload.filename, upload.content_type, "document", caption)
+                async def send_prepared_file(self, prepared, recipient):
+                    sent.append((prepared.data, prepared.filename, prepared.caption, recipient))
+                    return {"message_id": "wamid.file"}
+
+            with patch.object(settings, "WHATSAPP_SEND_MODE", "live"), patch.object(settings, "UPLOAD_DIR", directory), patch("app.api.v1.endpoints.customer_dispatch.WhatsAppService", FakeService):
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                    response = await client.post(f"/api/v1/customer-dispatch/{record.id}/retry")
+            self.assertEqual(response.json()["status"], "accepted")
+            self.assertEqual(sent, [(b"%PDF-test\n%%EOF", "bilty.pdf", "caption", "923001112222")])
+
     async def test_customer_crud_search_and_reassignment(self):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             created = await client.post("/api/v1/customers/", json={

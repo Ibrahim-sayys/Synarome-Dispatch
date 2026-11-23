@@ -63,4 +63,12 @@ Swagger UI exposes the same text and media forms. Use **Authorize** with the app
 | 502 media or message failure | Check backend log for the HTTP status and Meta error code, then verify Meta dashboard settings. |
 | 504 timeout | Check WhatsApp before retrying; an uncertain response may have been accepted by Meta. |
 
-The backend logs only status/error codes, not tokens or raw Meta error bodies. A successful HTTP response means Meta **accepted** the request, not that the recipient received it. Failed and uncertain Meta submissions remain in the database for diagnostics but are hidden from the History page, contact conversations, and dashboard recent list. A timeout is recorded as **status uncertain** because Meta might have accepted it. Local validation errors are rejected before a history record is created. No webhooks or delivery/read tracking are included.
+The backend logs only status/error codes, not tokens or raw Meta error bodies. A successful HTTP response means Meta **accepted** the request, not that the recipient received it. Failed and uncertain Meta submissions remain in the database for diagnostics but are hidden from the History page, contact conversations, and dashboard recent list. A timeout is recorded as **status uncertain** because Meta might have accepted it. Local validation errors are rejected before a history record is created. Delivery and read tracking require the webhook setup below.
+
+## Delivery and read receipts
+
+The backend accepts Meta webhooks at `/api/v1/whatsapp/webhook`. Set `WHATSAPP_WEBHOOK_VERIFY_TOKEN` to a long random value you choose, and `WHATSAPP_APP_SECRET` to the app secret from Meta's developer dashboard. Keep both private and restart the backend after setting them. The verify token is separate from the access token and the app secret.
+
+Expose the backend over public HTTPS (see [ngrok.md](ngrok.md) for local testing), then enter the complete URL, for example `https://your-domain.example/api/v1/whatsapp/webhook`, and the same verify token in the WhatsApp webhook configuration in Meta's app dashboard. Subscribe to the `messages` field and ensure the WhatsApp Business Account is subscribed to the app. Test by sending a message and checking dispatch history after delivery or reading. A local tunnel must remain running; use a stable public URL in production.
+
+Signed delivery updates change the existing message status to sent, delivered, read or failed. Incoming message content is ignored. Read status depends on WhatsApp providing a read receipt. Messages sent before webhook setup may not have delivery updates, and a status received before its message ID is saved is retried while a send is pending.

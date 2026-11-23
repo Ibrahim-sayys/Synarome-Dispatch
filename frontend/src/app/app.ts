@@ -1,10 +1,13 @@
-import { Component, HostListener, computed, inject } from '@angular/core';
+import { Component, HostListener, computed, effect, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { timer } from 'rxjs';
+import { MediaRetention, MediaRetentionService } from './core/media-retention.service';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/auth.service';
 
 @Component({
-  imports: [ReactiveFormsModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [ReactiveFormsModule, RouterLink, RouterLinkActive, RouterOutlet, DatePipe],
   selector: 'app-root',
   styleUrl: './app.css',
   templateUrl: './app.html',
@@ -13,6 +16,15 @@ export class App {
   private readonly auth = inject(AuthService);
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly router = inject(Router);
+  private readonly mediaRetention = inject(MediaRetentionService);
+  protected readonly cleanupNotice = signal<MediaRetention | null>(null);
+  protected readonly retention = signal<MediaRetention | null>(null);
+  protected readonly retentionError = signal('');
+  protected readonly retentionMessage = signal('');
+  protected readonly retentionSaving = signal(false);
+  protected readonly retentionLoading = signal(false);
+  protected isRetentionDialogOpen = false;
+  protected readonly retentionForm = this.formBuilder.group({ days: [10, [Validators.required, Validators.min(2), Validators.max(3650), Validators.pattern(/^[0-9]+$/)]] });
 
   protected isAccountMenuOpen = false;
   protected isPasswordDialogOpen = false;
@@ -34,6 +46,13 @@ export class App {
 
   constructor() {
     this.applyTheme();
+    effect((onCleanup) => {
+      if (this.currentUser()?.role !== 'super_admin') { this.cleanupNotice.set(null); return; }
+      const subscription = timer(0, 60000).subscribe(() => {
+        this.mediaRetention.get().subscribe({ next: (value) => this.cleanupNotice.set(value.notice_at ? value : null), error: () => this.cleanupNotice.set(null) });
+      });
+      onCleanup(() => subscription.unsubscribe());
+    });
   }
 
   @HostListener('document:click', ['$event'])
@@ -49,6 +68,39 @@ export class App {
       event.stopPropagation();
     }
     this.isAccountMenuOpen = !this.isAccountMenuOpen;
+  }
+
+  protected openRetentionDialog(): void {
+    this.isAccountMenuOpen = false;
+    this.isRetentionDialogOpen = true;
+    this.retention.set(null);
+    this.retentionError.set('');
+    this.retentionMessage.set('');
+    this.retentionLoading.set(true);
+    this.mediaRetention.get().subscribe({
+      next: (value) => {
+        this.retention.set(value);
+        this.retentionForm.setValue({ days: value.interval_days });
+        this.retentionLoading.set(false);
+      },
+      error: () => { this.retentionError.set('Could not load the media cleanup schedule.'); this.retentionLoading.set(false); },
+    });
+  }
+
+  protected saveRetention(): void {
+    if (this.retentionForm.invalid || this.retentionSaving() || !this.retention()) return;
+    this.retentionSaving.set(true);
+    this.retentionError.set('');
+    this.retentionMessage.set('');
+    this.mediaRetention.update(this.retentionForm.getRawValue().days).subscribe({
+      next: (value) => {
+        this.retention.set(value);
+        this.cleanupNotice.set(value.notice_at ? value : null);
+        this.retentionSaving.set(false);
+        this.retentionMessage.set('Cleanup schedule updated.');
+      },
+      error: () => { this.retentionError.set('Could not save the media cleanup schedule.'); this.retentionSaving.set(false); },
+    });
   }
 
   protected get newPasswordValue(): string {

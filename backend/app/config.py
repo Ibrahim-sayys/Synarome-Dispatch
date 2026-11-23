@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = ""
+    WHATSAPP_APP_SECRET: str = ""
     WHATSAPP_API_VERSION: str = "v26.0"
     WHATSAPP_ACCESS_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""

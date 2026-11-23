@@ -20,6 +20,9 @@
 .document-download { color: var(--primary); font-size: 1.15rem; }
 .message-footer { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: .7rem; gap: 10px; justify-content: flex-end; margin-top: 8px; }
 .message-status { font-weight: 700; }
+.message-error { color: var(--danger); font-size: .78rem; overflow-wrap: anywhere; }
+.retry-button { background: var(--surface); border: 1px solid var(--danger-border); border-radius: var(--radius-sm); color: var(--danger); cursor: pointer; font: inherit; font-size: .75rem; padding: 5px 10px; }
+.retry-button:disabled { opacity: .6; cursor: wait; }
 .history-loading, .history-empty-state { align-self: center; color: var(--text-muted); margin: auto; padding: 28px 0; text-align: center; }
 .history-error { align-self: center; background: var(--danger-soft); border: 1px solid var(--danger-border); border-radius: var(--radius-md); color: var(--danger); max-width: 100%; padding: 10px 14px; text-align: center; }
 .image-expanded-backdrop { align-items: center; background: rgba(10,15,29,.88); display: flex; inset: 0; justify-content: center; padding: 20px; position: fixed; z-index: 1200; }

@@ -154,12 +154,18 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
 
   protected statusText(record: DispatchRecord): string {
     if (record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') {
+      if (record.whatsapp_status === 'read') return 'Read';
+      if (record.whatsapp_status === 'delivered') return 'Delivered';
+      if (record.whatsapp_status === 'sent') return 'Sent';
       if (record.whatsapp_status === 'accepted') return 'Meta accepted';
       if (record.whatsapp_status === 'unknown') return 'Status uncertain';
       if (record.whatsapp_status === 'failed') return 'Failed';
       return 'Pending';
     }
     if (record.send_mode === 'whatsapp_test') {
+      if (record.whatsapp_status === 'read') return 'Read';
+      if (record.whatsapp_status === 'delivered') return 'Delivered';
+      if (record.whatsapp_status === 'sent') return 'Sent';
       if (record.whatsapp_status === 'accepted') return 'Meta accepted';
       if (record.whatsapp_status === 'unknown') return 'Status uncertain';
       if (record.whatsapp_status === 'failed') return 'Failed';

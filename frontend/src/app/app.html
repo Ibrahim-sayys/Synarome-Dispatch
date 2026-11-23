@@ -26,6 +26,7 @@
         @if (isAccountMenuOpen) {
           <div class="account-dropdown">
             <button type="button" (click)="openPasswordDialog()">Change password</button>
+            @if (currentUser()?.role === 'super_admin') { <button type="button" (click)="openRetentionDialog()">Media cleanup</button> }
             <button type="button" (click)="toggleTheme()">
               {{ theme === 'dark' ? 'Light theme' : 'Dark theme' }}
             </button>
@@ -37,9 +38,46 @@
   </header>
 }
 
+@if (cleanupNotice(); as notice) {
+  <div role="alert" style="padding: 12px 20px; background: #fff4d6; color: #513800;">
+    <strong>Scheduled media cleanup:</strong> {{ notice.file_count }} stored file(s) are eligible for deletion on or after {{ notice.next_run | date:'medium' }}.
+    @if (notice.oldest && notice.newest) { Dispatch dates: {{ notice.oldest | date:'mediumDate' }} to {{ notice.newest | date:'mediumDate' }}. }
+    Message history remains. Manage the schedule from the account menu.
+  </div>
+}
+
 <main class="app-main">
   <router-outlet />
 </main>
+
+@if (isRetentionDialogOpen) {
+  <div class="modal-backdrop">
+    <form class="password-modal retention-modal" [formGroup]="retentionForm" (ngSubmit)="saveRetention()" role="dialog" aria-modal="true" aria-labelledby="retention-title">
+      <div>
+        <p class="eyebrow">Storage management</p>
+        <h2 id="retention-title">Media cleanup</h2>
+        <p>Stored attachments are removed in batches when they reach the configured age. Message text and dispatch history remain.</p>
+      </div>
+      @if (retentionLoading()) { <p>Loading schedule...</p> }
+      @if (retention(); as schedule) {
+        <p><strong>Next cleanup:</strong> {{ schedule.next_run | date:'medium' }}</p>
+        @if (schedule.notice_at) {
+          <p><strong>Upcoming batch:</strong> {{ schedule.file_count }} eligible stored file(s).
+            @if (schedule.oldest && schedule.newest) { Dispatch dates: {{ schedule.oldest | date:'mediumDate' }} to {{ schedule.newest | date:'mediumDate' }}. }
+          </p>
+        }
+        <p>Super admins see an in-app notice at least 24 hours before cleanup. Cleanup runs even if nobody is online. Changing the interval starts a new schedule and cancels the current notice.</p>
+        <label><span>Cleanup interval in days</span><input type="number" min="2" max="3650" step="1" formControlName="days" /></label>
+      }
+      @if (retentionError()) { <p class="error" role="alert">{{ retentionError() }}</p> }
+      @if (retentionMessage()) { <p role="status">{{ retentionMessage() }}</p> }
+      <div class="modal-actions">
+        <button type="button" class="secondary" [disabled]="retentionSaving()" (click)="isRetentionDialogOpen = false">Close</button>
+        <button type="submit" [disabled]="retentionForm.invalid || retentionSaving() || !retention()">{{ retentionSaving() ? 'Saving...' : 'Save interval' }}</button>
+      </div>
+    </form>
+  </div>
+}
 
 @if (isPasswordDialogOpen) {
   <div class="modal-backdrop">

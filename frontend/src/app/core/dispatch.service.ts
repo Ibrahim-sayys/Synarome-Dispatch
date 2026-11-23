@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { EMPTY, Observable, expand, reduce, forkJoin, map, interval, exhaustMap, catchError } from 'rxjs';
+import { EMPTY, Observable, expand, reduce, forkJoin, map, interval, exhaustMap, catchError, of } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { MarketingPerson } from './contacts.service';
 import { AuthUser } from './auth.service';
@@ -127,7 +127,7 @@ export class DispatchService {
     const key = filters.person_id ? 'person_id' : filters.recipient_customer_id ? 'customer_id' : filters.customer_id ? 'conversation_customer_id' : null;
     if (!key) return outgoing;
     const id = filters.person_id ?? filters.recipient_customer_id ?? filters.customer_id!;
-    const incoming = this.http.get<DispatchRecord[]>(`${environment.apiBaseUrl}/api/v1/incoming`, { params: new HttpParams().set(key, String(id)) });
+    const incoming = this.http.get<DispatchRecord[]>(`${environment.apiBaseUrl}/api/v1/incoming`, { params: new HttpParams().set(key, String(id)) }).pipe(catchError(() => of([] as DispatchRecord[])));
     return forkJoin([outgoing, incoming]).pipe(map(([sent, received]) => [...sent, ...received].sort((a, b) =>
       (Date.parse(b.timestamp || '') || 0) - (Date.parse(a.timestamp || '') || 0) || b.id - a.id)));
   }

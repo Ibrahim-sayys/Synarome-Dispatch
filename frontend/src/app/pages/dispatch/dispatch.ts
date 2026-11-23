@@ -207,9 +207,12 @@ export class DispatchPage implements OnInit, OnDestroy {
     this.threadSubscription?.unsubscribe();
     this.threadError.set('');
     this.threadLoading.set(true);
-    this.threadSubscription = concat(of(0), interval(15000)).pipe(switchMap(() => this.historyService.listFullHistory({ customer_id: customer.id }))).subscribe({
-      next: (records) => { if (JSON.stringify(records) !== JSON.stringify(this.threadRecords())) this.threadRecords.set(records); this.threadLoading.set(false); },
-      error: () => { this.threadError.set('Unable to load previous messages.'); this.threadLoading.set(false); },
+    this.threadSubscription = concat(of(0), interval(15000)).pipe(
+      switchMap(() => this.historyService.listFullHistory({ customer_id: customer.id }).pipe(
+        catchError(() => { this.threadError.set('Unable to load previous messages.'); this.threadLoading.set(false); return EMPTY; }),
+      )),
+    ).subscribe({
+      next: (records) => { if (JSON.stringify(records) !== JSON.stringify(this.threadRecords())) this.threadRecords.set(records); this.threadLoading.set(false); this.threadError.set(''); },
     });
   }
 

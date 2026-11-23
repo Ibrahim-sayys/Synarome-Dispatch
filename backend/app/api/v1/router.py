@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, contacts, customer_dispatch, customers, dispatch, users, whatsapp, whatsapp_webhook, media_retention
+from app.api.v1.endpoints import auth, contacts, customer_dispatch, customers, dispatch, users, whatsapp, whatsapp_webhook, media_retention, incoming
 
 
 api_router = APIRouter()
@@ -36,3 +36,4 @@ api_router.include_router(customer_dispatch.router, prefix="/customer-dispatch",
 
 api_router.include_router(whatsapp_webhook.router, prefix="/whatsapp", tags=["WhatsApp Webhook"])
 api_router.include_router(media_retention.router, prefix="/media-retention", tags=["Media retention"])
+api_router.include_router(incoming.router, prefix="/incoming", tags=["Incoming messages"])

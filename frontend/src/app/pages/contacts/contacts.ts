@@ -1,9 +1,9 @@
 import { DatePipe } from '@angular/common';
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { EMPTY, Subscription, catchError, from, mergeMap, tap } from 'rxjs';
+import { EMPTY, Subscription, catchError, from, mergeMap, tap, concat, of, interval, switchMap } from 'rxjs';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
-import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
+import { DispatchRecord, DispatchService, mergeDispatchStatus } from '../../core/dispatch.service';
 import { ActionNotice } from '../../core/action-notice';
 import { matchesChatSearch } from '../../shared/chat-search';
 
@@ -50,6 +50,8 @@ export class Contacts implements OnInit, OnDestroy {
 
   private historyRequest?: Subscription;
   private previewRequests?: Subscription;
+  private statusRequest?: Subscription;
+  private readonly requestedPreviewIds = new Set<number>();
 
   private readonly contactsService = inject(ContactsService);
   private readonly dispatchService = inject(DispatchService);
@@ -68,6 +70,10 @@ export class Contacts implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadContacts();
+    this.statusRequest = this.dispatchService.monitorStatuses(() => this.contactHistory()).subscribe((statuses) => {
+      const byId = new Map(statuses.map((status) => [status.id, status]));
+      this.contactHistory.update((records) => records.map((record) => mergeDispatchStatus(record, byId.get(record.id))));
+    });
   }
 
   protected loadContacts(): void {
@@ -191,8 +197,9 @@ export class Contacts implements OnInit, OnDestroy {
     this.selectedContact.set(contact);
     this.historyError.set('');
     this.isLoadingContactHistory.set(true);
-    this.historyRequest = this.dispatchService.listFullHistory({ person_id: contact.id }).subscribe({
+    this.historyRequest = concat(of(0), interval(15000)).pipe(switchMap(() => this.dispatchService.listFullHistory({ person_id: contact.id }))).subscribe({
       next: (history) => {
+        if (JSON.stringify(history) === JSON.stringify(this.contactHistory()) && !this.isLoadingContactHistory()) return;
         this.contactHistory.set(history);
         this.isLoadingContactHistory.set(false);
         this.scrollToLatest();
@@ -208,6 +215,8 @@ export class Contacts implements OnInit, OnDestroy {
   protected closeContactHistory(): void {
     this.historyRequest?.unsubscribe();
     this.previewRequests?.unsubscribe();
+    this.previewRequests = undefined;
+    this.requestedPreviewIds.clear();
     Object.values(this.previewUrls()).forEach((url) => URL.revokeObjectURL(url));
     this.selectedContact.set(null);
     this.contactHistory.set([]);
@@ -220,7 +229,10 @@ export class Contacts implements OnInit, OnDestroy {
   }
 
   private loadImagePreviews(history: DispatchRecord[]): void {
-    this.previewRequests = from(history.filter((record) => this.isImage(record))).pipe(
+    const fresh = history.filter((record) => this.isImage(record) && !this.requestedPreviewIds.has(record.id));
+    fresh.forEach((record) => this.requestedPreviewIds.add(record.id));
+    this.previewRequests ??= new Subscription();
+    this.previewRequests.add(from(fresh).pipe(
       mergeMap((record) => this.dispatchService.downloadFile(record.id).pipe(
         tap((blob) => {
           const url = URL.createObjectURL(blob);
@@ -231,7 +243,7 @@ export class Contacts implements OnInit, OnDestroy {
           return EMPTY;
         }),
       ), 4),
-    ).subscribe();
+    ).subscribe());
   }
 
   protected isImage(record: DispatchRecord): boolean {
@@ -255,6 +267,7 @@ export class Contacts implements OnInit, OnDestroy {
   }
 
   protected contactStatus(record: DispatchRecord, contactId: number): string {
+    if (record.direction === 'incoming') return 'Received';
     if (record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') {
       if (record.whatsapp_status === 'read') return 'Read';
       if (record.whatsapp_status === 'delivered') return 'Delivered';
@@ -314,6 +327,7 @@ export class Contacts implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.statusRequest?.unsubscribe();
     this.closeContactHistory();
     this.notice.destroy();
   }

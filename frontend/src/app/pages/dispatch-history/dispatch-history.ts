@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { DispatchRecord, DispatchService, HistoryFilters, HistorySender } from '../../core/dispatch.service';
+import { DispatchRecord, DispatchService, HistoryFilters, HistorySender, mergeDispatchStatus } from '../../core/dispatch.service';
 
 @Component({
   selector: 'app-dispatch-history',
@@ -46,8 +46,13 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
   private sendersRequest?: Subscription;
   private routeRequest?: Subscription;
   private previewRequest?: Subscription;
+  private statusRequest?: Subscription;
 
   ngOnInit(): void {
+    this.statusRequest = this.dispatchService.monitorStatuses(() => this.history()).subscribe((statuses) => {
+      const byId = new Map(statuses.map((status) => [status.id, status]));
+      this.history.update((records) => records.map((record) => mergeDispatchStatus(record, byId.get(record.id))));
+    });
     this.loadSenders();
     this.routeRequest = this.route.queryParamMap.subscribe((params) => {
       const rawId = params.get('dispatch_id');
@@ -219,6 +224,7 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.statusRequest?.unsubscribe();
     this.historyRequest?.unsubscribe();
     this.sendersRequest?.unsubscribe();
     this.routeRequest?.unsubscribe();

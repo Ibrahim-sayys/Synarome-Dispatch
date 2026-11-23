@@ -1,7 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, ElementRef, HostListener, OnDestroy, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
+import { DispatchRecord, DispatchService, DispatchStatus, mergeDispatchStatus } from '../../core/dispatch.service';
 import { matchesChatSearch } from '../chat-search';
 
 @Component({
@@ -23,7 +23,8 @@ export class MessageThread implements OnDestroy {
   readonly retryCompleted = output<void>();
   protected readonly retrying = signal<Set<number>>(new Set());
   protected readonly retryError = signal('');
-  private readonly retryResults = signal<Record<number, { status: string; error: string | null }>>({});
+  private readonly retryResults = signal<Record<number, { status: string; error: string | null; messageId: string | null }>>({});
+  private readonly liveStatuses = signal<Record<number, DispatchStatus>>({});
   protected readonly previewUrls = signal<Record<number, string>>({});
   protected readonly previewErrors = signal<Set<number>>(new Set());
   protected readonly expandedImage = signal<{ url: string; label: string } | null>(null);
@@ -31,8 +32,10 @@ export class MessageThread implements OnDestroy {
   protected readonly entries = computed(() => {
     let previousDay = '';
     return [...this.records()].reverse().map((record) => {
+      const current = mergeDispatchStatus(record, this.liveStatuses()[record.id]);
       const result = this.retryResults()[record.id];
-      return result ? { ...record, whatsapp_status: result.status, failure_reason: result.error } : record;
+      if (result && current.whatsapp_message_id !== result.messageId) return { ...current, whatsapp_status: result.status, failure_reason: result.error, whatsapp_message_id: result.messageId };
+      return current;
     }).filter((record) => matchesChatSearch(record, this.searchTerm())).map((record) => {
       const parsed = record.timestamp ? new Date(record.timestamp) : null;
       const timestamp = parsed && !Number.isNaN(parsed.getTime()) ? parsed : null;
@@ -49,6 +52,9 @@ export class MessageThread implements OnDestroy {
   private pendingOlderOffset: number | null = null;
 
   constructor() {
+    this.subscriptions.add(this.dispatch.monitorStatuses(() => this.records()).subscribe((statuses) => {
+      this.liveStatuses.set(Object.fromEntries(statuses.map((status) => [status.id, status])));
+    }));
     effect(() => {
       const showLatest = this.scrollToLatest();
       for (const record of this.records()) {
@@ -85,7 +91,7 @@ export class MessageThread implements OnDestroy {
     this.retrying.update((ids) => new Set([...ids, record.id]));
     this.subscriptions.add(this.dispatch.retry(record.id).subscribe({
       next: (result) => {
-        this.retryResults.update((items) => ({ ...items, [record.id]: { status: result.status, error: result.error ?? null } }));
+        this.retryResults.update((items) => ({ ...items, [record.id]: { status: result.status, error: result.error ?? null, messageId: result.message_id ?? null } }));
         this.retrying.update((ids) => { const next = new Set(ids); next.delete(record.id); return next; });
         this.retryCompleted.emit();
       },
@@ -102,6 +108,7 @@ export class MessageThread implements OnDestroy {
   }
 
   protected status(record: DispatchRecord): string {
+    if (record.direction === 'incoming') return 'Received';
     if (record.whatsapp_status === 'read') return 'Read';
       if (record.whatsapp_status === 'delivered') return 'Delivered';
       if (record.whatsapp_status === 'sent') return 'Sent';

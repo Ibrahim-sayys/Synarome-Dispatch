@@ -4,7 +4,9 @@
 .load-older:disabled { opacity: .55; }
 .conversation-date { align-self: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-full); box-shadow: var(--shadow-sm); color: var(--text-muted); font-size: .75rem; font-weight: 700; padding: 6px 13px; }
 .conversation-row { display: flex; justify-content: flex-end; }
-.message-bubble { background: var(--success-soft); border: 1px solid var(--success-border); border-radius: 17px 17px 5px 17px; box-shadow: var(--shadow-sm); max-width: min(590px, 78%); min-width: min(220px, 100%); padding: 12px 14px 9px; width: fit-content; }
+.conversation-row.incoming-row { justify-content: flex-start; }
+.incoming-row .message-bubble { background: var(--surface); border-color: var(--border); border-radius: 17px 17px 17px 5px; }
+.message-bubble { background: var(--success-soft); border: 1px solid var(--success-border); border-radius: 17px 17px 5px 17px; box-shadow: var(--shadow-sm); box-sizing: border-box; max-width: min(590px, 78%); min-width: min(220px, 100%); padding: 12px 14px 9px; width: fit-content; }
 .message-bubble.message-failed { background: var(--danger-soft); border-color: var(--danger-border); }
 .message-sender { color: var(--primary-strong); font-size: .76rem; font-weight: 800; margin-bottom: 8px; }
 .test-destination { color: var(--text-muted); font-size: .72rem; margin-bottom: 8px; }
@@ -15,7 +17,7 @@
 .message-document { align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-main); cursor: pointer; display: flex; gap: 12px; max-width: 100%; padding: 10px 12px; text-align: left; width: 290px; }
 .message-document:hover { background: var(--surface-hover); }
 .document-icon { font-size: 1.5rem; line-height: 1; }
-.document-label { flex: 1; font-size: .85rem; min-width: 0; }
+.document-label { flex: 1; font-size: .85rem; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .document-label small { color: var(--text-muted); display: block; font-size: .72rem; font-weight: 500; margin-top: 2px; }
 .document-download { color: var(--primary); font-size: 1.15rem; }
 .message-footer { align-items: center; color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: .7rem; gap: 10px; justify-content: flex-end; margin-top: 8px; }

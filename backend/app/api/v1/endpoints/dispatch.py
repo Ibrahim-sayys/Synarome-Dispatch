@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy import and_, extract, func, or_
 from sqlalchemy.orm import Session, joinedload
+from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, get_db
 from app.models.dispatch import Dispatch
@@ -14,6 +15,21 @@ from app.models.user import User
 from app.schemas.dispatch import DispatchHistoryPageResponse, DispatchResponse, DispatchStatsResponse, HistorySenderResponse
 
 router = APIRouter()
+
+
+class StatusRequest(BaseModel):
+    ids: list[int] = Field(max_length=1000)
+
+
+@router.post('/statuses')
+def dispatch_statuses(payload: StatusRequest, current_user: CurrentUser, db: Session = Depends(get_db)):
+    ids = {value for value in payload.ids if value > 0}
+    if not ids:
+        return []
+    return [{'id': row.id, 'whatsapp_status': row.whatsapp_status, 'failure_reason': row.failure_reason,
+             'whatsapp_message_id': row.whatsapp_message_id}
+            for row in db.query(Dispatch.id, Dispatch.whatsapp_status, Dispatch.failure_reason, Dispatch.whatsapp_message_id)
+            .filter(Dispatch.id.in_(ids)).all()]
 
 
 def _local_seconds(timestamp, offset_minutes: int):

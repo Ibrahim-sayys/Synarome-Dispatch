@@ -22,6 +22,8 @@ describe('DispatchService full history', () => {
 
     const second = http.expectOne((request) => request.url.endsWith('/history/page') && request.params.get('page') === '2');
     second.flush({ items: [{ id: 1, sender_id: 1, recipients: [] }], total: 101, page: 2, page_size: 100 });
+    const incoming = http.expectOne((request) => request.url.endsWith('/api/v1/incoming') && request.params.get('person_id') === '7');
+    incoming.flush([]);
     expect(records?.map((record) => record.id)).toEqual([...firstItems.map((record) => record.id), 1]);
     http.verify();
   });

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContactsService } from '../../core/contacts.service';
 import { Customer, CustomersService } from '../../core/customers.service';
@@ -16,7 +16,7 @@ describe('Customers directory', () => {
     update: vi.fn(() => of({})),
     delete: vi.fn(() => of(undefined)),
   };
-  const dispatch = { listFullHistory: vi.fn(() => of([] as DispatchRecord[])) };
+  const dispatch = { listFullHistory: vi.fn(() => of([] as DispatchRecord[])), monitorStatuses: () => EMPTY };
 
   beforeEach(async () => {
     vi.clearAllMocks();

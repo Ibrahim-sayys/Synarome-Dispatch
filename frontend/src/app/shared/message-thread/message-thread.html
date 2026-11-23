@@ -5,10 +5,10 @@
   @else {
     @for (entry of entries(); track entry.record.id) {
       @if (entry.showDate) { <div class="conversation-date">{{ entry.timestamp ? (entry.timestamp | date:'EEEE, d MMM y') : 'Date unavailable' }}</div> }
-      <div class="conversation-row">
+      <div class="conversation-row" [class.incoming-row]="entry.record.direction === 'incoming'">
         <article class="message-bubble" [class.message-failed]="status(entry.record) === 'Failed'">
-          <div class="message-sender">{{ entry.record.sender?.username || 'Unknown sender' }}</div>
-          <div class="test-destination">To {{ entry.record.recipient_name || entry.record.customer_name || 'recipient' }} · {{ entry.record.actual_recipient || 'Number unavailable' }}</div>
+          <div class="message-sender">{{ entry.record.direction === 'incoming' ? (entry.record.recipient_name || entry.record.actual_recipient || 'WhatsApp contact') : (entry.record.sender?.username || 'Unknown sender') }}</div>
+          <div class="test-destination">{{ entry.record.direction === 'incoming' ? 'From' : 'To' }} {{ entry.record.direction === 'incoming' ? entry.record.actual_recipient : (entry.record.recipient_name || entry.record.customer_name || 'recipient') }}</div>
           @if (isImage(entry.record)) {
             @if (previewUrls()[entry.record.id]; as url) { <button type="button" class="message-image-button" (click)="openImage(entry.record)" [attr.aria-label]="'Open image from dispatch ' + entry.record.id"><img class="message-image" [src]="url" [alt]="entry.record.original_filename || 'Bilty image'" /></button> }
             @else { <div class="image-placeholder">{{ previewErrors().has(entry.record.id) ? 'Image unavailable' : 'Loading image...' }}</div> }
@@ -18,6 +18,7 @@
             <div class="image-placeholder">Attachment removed: {{ entry.record.original_filename }}</div>
           }
           @if (entry.record.message_text) { <p class="message-text">{{ entry.record.message_text }}</p> }
+          @if (entry.record.direction === 'incoming' && !entry.record.message_text && !entry.record.file_path) { <p class="message-text">Received {{ entry.record.incoming_type || 'message' }} (preview unavailable)</p> }
           @if (entry.record.failure_reason) { <p class="message-error">{{ entry.record.failure_reason }}</p> }
           @if (entry.record.whatsapp_status === 'failed' && (!entry.record.original_filename || entry.record.file_path) && (entry.record.send_mode === 'customer_dispatch' || entry.record.send_mode === 'customer_test')) { <button type="button" class="retry-button" [disabled]="retrying().has(entry.record.id)" (click)="retry(entry.record)">{{ retrying().has(entry.record.id) ? 'Retrying...' : 'Try again' }}</button> }
           <div class="message-footer"><span class="message-status">{{ status(entry.record) }}</span><time>{{ entry.timestamp ? (entry.timestamp | date:'d MMM y, h:mm a') : 'Time unavailable' }}</time></div>

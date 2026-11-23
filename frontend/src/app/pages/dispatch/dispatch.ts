@@ -1,8 +1,8 @@
-import { Component, ElementRef, HostListener, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { ReactiveFormsModule, NonNullableFormBuilder } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
-import { CustomerDispatchService, SendMode, SendResponse } from '../../core/customer-dispatch.service';
+import { Subject, Subscription, debounceTime, distinctUntilChanged, concat, of, interval, switchMap, catchError, EMPTY } from 'rxjs';
+import { CustomerDispatchService, SendMode, SendResponse, WindowStatus } from '../../core/customer-dispatch.service';
 import { Customer, CustomersService } from '../../core/customers.service';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
@@ -30,6 +30,8 @@ export class DispatchPage implements OnInit, OnDestroy {
   protected readonly loading = signal(false);
   protected readonly error = signal('');
   protected readonly mode = signal<SendMode | null>(null);
+  protected readonly windowStatus = signal<WindowStatus | null>(null);
+  protected readonly windowError = signal('');
   protected readonly includeCustomer = signal(false);
   protected readonly draftIncludeCustomer = signal(false);
   protected readonly selectedFiles = signal<File[]>([]);
@@ -114,6 +116,28 @@ export class DispatchPage implements OnInit, OnDestroy {
   private threadSubscription?: Subscription;
   protected readonly form = this.builder.group({ message_text: [''] });
 
+  constructor() {
+    effect((onCleanup) => {
+      const customer = this.selected();
+      const mode = this.mode();
+      const stage = this.stage();
+      const include = this.includeCustomer();
+      const extra = this.extraRecipients();
+      this.windowStatus.set(null);
+      this.windowError.set('');
+      if (!customer || !mode || stage !== 'compose') return;
+      const marketing = extra.filter((item) => item.kind === 'marketing_person').map((item) => item.id);
+      const customers = extra.filter((item) => item.kind === 'customer').map((item) => item.id);
+      const request = concat(of(0), interval(15000)).pipe(switchMap(() => this.dispatchService.windowStatus(customer.id, include, marketing, customers).pipe(catchError(() => {
+        this.windowStatus.set(null); this.windowError.set('Unable to check the 24-hour reply window.'); return EMPTY;
+      })))).subscribe({
+        next: (status) => { this.windowStatus.set(status); this.windowError.set(''); },
+        error: () => { this.windowStatus.set(null); this.windowError.set('Unable to check the 24-hour reply window.'); },
+      });
+      onCleanup(() => request.unsubscribe());
+    });
+  }
+
   @HostListener('document:click', ['$event'])
   protected closeAttachmentMenuOnOutsideClick(event: MouseEvent): void {
     const target = event.target;
@@ -183,10 +207,20 @@ export class DispatchPage implements OnInit, OnDestroy {
     this.threadSubscription?.unsubscribe();
     this.threadError.set('');
     this.threadLoading.set(true);
-    this.threadSubscription = this.historyService.listFullHistory({ customer_id: customer.id }).subscribe({
-      next: (records) => { this.threadRecords.set(records); this.threadLoading.set(false); },
+    this.threadSubscription = concat(of(0), interval(15000)).pipe(switchMap(() => this.historyService.listFullHistory({ customer_id: customer.id }))).subscribe({
+      next: (records) => { if (JSON.stringify(records) !== JSON.stringify(this.threadRecords())) this.threadRecords.set(records); this.threadLoading.set(false); },
       error: () => { this.threadError.set('Unable to load previous messages.'); this.threadLoading.set(false); },
     });
+  }
+
+  protected hasSendIssues(result: SendResponse): boolean {
+    return result.results.some((item) => item.status !== 'accepted');
+  }
+
+  protected onRetryCompleted(): void {
+    this.lastSend.set(null);
+    this.attachmentResults.set([]);
+    this.loadThread();
   }
 
   protected openPicker(): void {
@@ -541,7 +575,8 @@ export class DispatchPage implements OnInit, OnDestroy {
     const message = this.form.getRawValue().message_text.trim();
     const files = [...this.selectedFiles()];
     if (!customer || this.sending() || (!message && !files.length)) return;
-    if (files.length && message.length > 1024) { this.error.set('A file caption can contain up to 1024 characters.'); return; }
+    if (!files.length && !this.windowStatus()?.all_open) { this.error.set('Custom messages require a recent reply from every selected recipient.'); return; }
+    if (files.length && message) { this.error.set('Remove the typed text before sending an attachment; the template uses the recipient’s name.'); return; }
     this.error.set(''); this.lastSend.set(null); this.attachmentResults.set([]); this.sending.set(true);
     const marketingIds = this.extraRecipients().filter((item) => item.kind === 'marketing_person').map((item) => item.id);
     const customerIds = this.extraRecipients().filter((item) => item.kind === 'customer').map((item) => item.id);

@@ -17,16 +17,20 @@ from app.models.customer import Customer
 from app.models.dispatch import Dispatch
 from app.models.marketing_person import MarketingPerson
 from app.services.whatsapp_service import PreparedMedia, WhatsAppError, WhatsAppService
+from app.services.whatsapp_window import window_expiry
 
 router = APIRouter()
 
 
-class CustomerTextMessage(BaseModel):
+class RecipientSelection(BaseModel):
     customer_id: int = Field(ge=1)
-    message: str = Field(min_length=1, max_length=4096)
     include_customer: bool = False
     additional_marketing_person_ids: list[int] = Field(default_factory=list, max_length=25)
     additional_customer_ids: list[int] = Field(default_factory=list, max_length=25)
+
+
+class CustomerTextMessage(RecipientSelection):
+    message: str = Field(min_length=1, max_length=4096)
 
 
 @dataclass(frozen=True)
@@ -122,6 +126,24 @@ async def send_mode(current_user: CurrentUser):
     }
 
 
+def _actual_destinations(destinations: list[Destination], mode: str) -> list[Destination]:
+    return [Destination(
+        'test' if d.kind == 'marketing_person' else 'customer_test', d.name,
+        _number(settings.WHATSAPP_TEST_RECIPIENT.strip() if d.kind == 'marketing_person' else settings.WHATSAPP_CUSTOMER_TEST_RECIPIENT.strip()),
+        d.customer_id, d.marketing_person_id,
+    ) if mode == 'test' else d for d in destinations]
+
+
+@router.post('/window-status')
+def recipient_window_status(payload: RecipientSelection, current_user: CurrentUser, db: Session = Depends(get_db)):
+    _, destinations = _destinations(db, payload.customer_id, payload.include_customer, payload.additional_marketing_person_ids, payload.additional_customer_ids)
+    recipients = []
+    for destination in _actual_destinations(destinations, _mode()):
+        expiry = window_expiry(db, destination.number)
+        recipients.append({'name': destination.name, 'number': destination.number, 'open': expiry is not None, 'expires_at': expiry})
+    return {'all_open': all(item['open'] for item in recipients), 'recipients': recipients}
+
+
 async def _send(
     db: Session, sender_id: int, customer: Customer, destinations: list[Destination],
     message: str | None, prepared: PreparedMedia | None = None, file_path: str | None = None,
@@ -132,15 +154,11 @@ async def _send(
         service._configured(service.recipient if mode == "test" else destinations[0].number)
     except WhatsAppError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    actual_destinations = [
-        Destination(
-            "test" if destination.kind == "marketing_person" else "customer_test",
-            destination.name,
-            _number(service.recipient if destination.kind == "marketing_person" else settings.WHATSAPP_CUSTOMER_TEST_RECIPIENT.strip()),
-            destination.customer_id, destination.marketing_person_id,
-        ) if mode == "test" else destination
-        for destination in destinations
-    ]
+    actual_destinations = _actual_destinations(destinations, mode)
+    if not prepared:
+        closed = [d.name for d in actual_destinations if not window_expiry(db, d.number)]
+        if closed:
+            raise HTTPException(409, detail='Free-form messages require a reply in the last 24 hours from: ' + ', '.join(closed) + '. Use an approved attachment template instead.')
     results = []
     for destination in actual_destinations:
         kind, name, number = destination.kind, destination.name, destination.number
@@ -161,7 +179,9 @@ async def _send(
             db.rollback()
             raise HTTPException(status_code=500, detail="Could not save dispatch record. No WhatsApp request was made for this destination.") from exc
         try:
-            sent = await (service.send_prepared_file(prepared, number) if prepared else service.send_text(message or "", number))
+            if not prepared and not window_expiry(db, number):
+                raise WhatsAppError('The 24-hour reply window has closed. Use an approved attachment template.', 409)
+            sent = await (service.send_template_file(prepared, number, name) if prepared else service.send_text(message or "", number))
             record.whatsapp_status = "accepted"
             record.whatsapp_message_id = sent["message_id"]
         except WhatsAppError as exc:
@@ -203,6 +223,8 @@ async def retry_dispatch(dispatch_id: int, current_user: CurrentUser, db: Sessio
     if (record.send_mode == "customer_test") != (_mode() == "test"):
         raise HTTPException(409, "The sending mode has changed since this dispatch; send a new message instead.")
     number = _number(record.actual_recipient or "")
+    if not record.file_path and not window_expiry(db, number):
+        raise HTTPException(409, 'The 24-hour reply window has closed. Use an approved attachment template.')
     service = WhatsAppService()
     prepared = None
     try:
@@ -215,6 +237,7 @@ async def retry_dispatch(dispatch_id: int, current_user: CurrentUser, db: Sessio
             with path.open("rb") as source:
                 upload = UploadFile(file=source, filename=record.original_filename or path.name, headers=Headers({"content-type": mime or ""}))
                 prepared = await service.prepare_file(upload, record.message_text, number)
+                service.validate_media_template(prepared)
     except WhatsAppError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
 
@@ -226,7 +249,7 @@ async def retry_dispatch(dispatch_id: int, current_user: CurrentUser, db: Sessio
         raise HTTPException(409, "This dispatch is already being retried or has changed.")
     db.refresh(record)
     try:
-        sent = await (service.send_prepared_file(prepared, number) if prepared else service.send_text(record.message_text or "", number))
+        sent = await (service.send_template_file(prepared, number, record.recipient_name or "") if prepared else service.send_text(record.message_text or "", number))
         record.whatsapp_status = "accepted"
         record.whatsapp_message_id = sent["message_id"]
     except WhatsAppError as exc:
@@ -249,6 +272,7 @@ async def send_customer_media(
         service = WhatsAppService()
         recipient = service.recipient if _mode() == "test" else destinations[0].number
         prepared = await service.prepare_file(file, caption, recipient)
+        service.validate_media_template(prepared)
         directory = Path(settings.UPLOAD_DIR)
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{uuid4().hex}{Path(prepared.filename).suffix.lower()}"

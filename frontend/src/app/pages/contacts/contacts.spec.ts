@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 import { ContactsService } from '../../core/contacts.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
@@ -12,7 +12,7 @@ describe('Marketing person chat', () => {
       { id: 2, sender_id: 1, timestamp: '2026-11-02T10:00:00Z', message_text: 'Bilty details', recipients: [] },
       { id: 1, sender_id: 1, timestamp: '2026-11-01T10:00:00Z', message_text: 'First message', recipients: [] },
     ];
-    const dispatch = { listFullHistory: vi.fn(() => of(records)) };
+    const dispatch = { listFullHistory: vi.fn(() => of(records)), monitorStatuses: () => EMPTY };
     await TestBed.configureTestingModule({
       imports: [Contacts],
       providers: [

@@ -1,6 +1,6 @@
 import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject, Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
+import { Subject, Subscription, debounceTime, distinctUntilChanged, concat, of, interval, switchMap } from 'rxjs';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
 import { Customer, CustomerPayload, CustomersService } from '../../core/customers.service';
 import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
@@ -128,8 +128,8 @@ export class Customers implements OnInit, OnDestroy {
     this.closeHistory();
     this.selectedCustomer.set(customer);
     this.historyLoading.set(true);
-    this.historySubscription = this.dispatch.listFullHistory({ recipient_customer_id: customer.id }).subscribe({
-      next: (records) => { this.customerHistory.set(records); this.historyLoading.set(false); },
+    this.historySubscription = concat(of(0), interval(15000)).pipe(switchMap(() => this.dispatch.listFullHistory({ recipient_customer_id: customer.id }))).subscribe({
+      next: (records) => { if (JSON.stringify(records) !== JSON.stringify(this.customerHistory())) this.customerHistory.set(records); this.historyLoading.set(false); },
       error: () => { this.historyError.set('Unable to load customer messages.'); this.historyLoading.set(false); },
     });
   }

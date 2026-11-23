@@ -15,6 +15,7 @@ from app.models.dispatch import Dispatch
 from app.models.dispatch_recipient import DispatchRecipient
 from app.models.marketing_person import MarketingPerson
 from app.services.whatsapp_service import WhatsAppError, WhatsAppService
+from app.services.whatsapp_window import window_expiry
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -124,6 +125,8 @@ async def send_text(payload: TextMessage, current_user: CurrentUser, db: Session
     except WhatsAppError as exc:
         raise _http_error(exc) from exc
     contact_ids = _selected_contact_ids(db, payload.demo_contact_ids)
+    if not window_expiry(db, service.recipient):
+        raise HTTPException(409, 'The 24-hour reply window is closed for the test recipient.')
     record = _create_record(db, current_user.id, service, contact_ids, message)
     return await _submit(db, record, service.send_text(message))
 
@@ -141,6 +144,8 @@ async def send_media(
     try:
         service = WhatsAppService()
         prepared = await service.prepare_file(file, caption)
+        if not window_expiry(db, service.recipient):
+            raise HTTPException(409, 'The 24-hour reply window is closed; use an approved attachment template.')
         contact_ids = _selected_contact_ids(db, demo_contact_ids or [])
         directory = Path(settings.UPLOAD_DIR)
         directory.mkdir(parents=True, exist_ok=True)

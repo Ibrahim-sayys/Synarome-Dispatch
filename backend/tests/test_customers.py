@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -14,6 +15,7 @@ from app.main import app
 from app.models.customer import Customer
 from app.models.dispatch import Dispatch
 from app.models.marketing_person import MarketingPerson
+from app.models.incoming_message import IncomingMessage
 from app.models.user import User, UserRole
 from app.api.v1.endpoints.dispatch import dispatch_history
 from app.services.whatsapp_service import PreparedMedia, WhatsAppError
@@ -30,6 +32,12 @@ class CustomerDispatchTests(unittest.IsolatedAsyncioTestCase):
         self.john = MarketingPerson(full_name="John", phone_number="+923001112222")
         self.sara = MarketingPerson(full_name="Sara", phone_number="+923003334444")
         self.db.add_all([self.user, self.john, self.sara])
+        patcher = patch.object(settings, 'WHATSAPP_TEST_RECIPIENT', '15551234567')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        for index, number in enumerate(['923001112222', '923003334444', '923005556666', '923007778888', '15551234567', '15557654321']):
+            self.db.add(IncomingMessage(whatsapp_message_id=f'window-fixture-{index}', sender_number=number,
+                                        message_type='text', timestamp=datetime.now(timezone.utc)))
         self.db.commit()
 
         async def fake_user():
@@ -43,6 +51,56 @@ class CustomerDispatchTests(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self):
         app.dependency_overrides.clear()
+
+    async def test_status_lookup_returns_current_receipt(self):
+        record = Dispatch(sender_id=self.user.id, send_mode='customer_dispatch', whatsapp_status='read', whatsapp_message_id='wamid.read')
+        self.db.add(record); self.db.commit()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            response = await client.post('/api/v1/dispatch/statuses', json={'ids': [record.id, -1]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()[0]['whatsapp_status'], 'read')
+        self.assertEqual(response.json()[0]['whatsapp_message_id'], 'wamid.read')
+
+    async def test_text_requires_open_window_for_every_actual_recipient(self):
+        customer = Customer(full_name='Ali', phone_number='03005556666', marketing_person_id=self.john.id)
+        self.db.add(customer)
+        self.db.query(IncomingMessage).filter(IncomingMessage.sender_number == '923005556666').update(
+            {IncomingMessage.timestamp: datetime.now(timezone.utc) - timedelta(hours=25)})
+        self.db.commit()
+        calls = []
+        class FakeService:
+            recipient = '15551234567'
+            def _configured(self, recipient): pass
+            async def send_text(self, message, recipient):
+                calls.append(recipient)
+                return {'message_id': 'wamid.send'}
+        with patch.object(settings, 'WHATSAPP_SEND_MODE', 'live'), patch('app.api.v1.endpoints.customer_dispatch.WhatsAppService', FakeService):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                selection = {'customer_id': customer.id, 'include_customer': True}
+                status = await client.post('/api/v1/customer-dispatch/window-status', json=selection)
+                self.assertEqual([r['open'] for r in status.json()['recipients']], [True, False])
+                blocked = await client.post('/api/v1/customer-dispatch/text', json={**selection, 'message': 'Hello'})
+                self.assertEqual(blocked.status_code, 409)
+                self.assertEqual(calls, [])
+                self.db.add(IncomingMessage(whatsapp_message_id='new-reply', sender_number='923005556666',
+                                            message_type='text', timestamp=datetime.now(timezone.utc)))
+                self.db.commit()
+                self.assertTrue((await client.post('/api/v1/customer-dispatch/window-status', json=selection)).json()['all_open'])
+                sent = await client.post('/api/v1/customer-dispatch/text', json={**selection, 'message': 'Hello'})
+                self.assertEqual(sent.status_code, 200)
+                self.assertEqual(calls, ['923001112222', '923005556666'])
+
+    async def test_retry_text_rechecks_reply_window(self):
+        self.db.query(IncomingMessage).delete()
+        record = Dispatch(sender_id=self.user.id, send_mode='customer_dispatch', whatsapp_status='failed',
+                          actual_recipient='923001112222', message_text='Hello')
+        self.db.add(record); self.db.commit()
+        with patch.object(settings, 'WHATSAPP_SEND_MODE', 'live'):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+                response = await client.post(f'/api/v1/customer-dispatch/{record.id}/retry')
+        self.assertEqual(response.status_code, 409)
+        self.db.refresh(record)
+        self.assertEqual(record.whatsapp_status, 'failed')
 
     async def test_manual_retry_only_resends_failed_destination(self):
         record = Dispatch(sender_id=self.user.id, send_mode="customer_dispatch", whatsapp_status="failed",
@@ -79,7 +137,7 @@ class CustomerDispatchTests(unittest.IsolatedAsyncioTestCase):
             path.write_bytes(b"%PDF-test\n%%EOF")
             record = Dispatch(sender_id=self.user.id, send_mode="customer_dispatch", whatsapp_status="failed",
                               actual_recipient="923001112222", recipient_kind="marketing_person", recipient_name="John",
-                              file_path=str(path), original_filename="bilty.pdf", message_text="caption")
+                              file_path=str(path), original_filename="bilty.pdf", message_text=None)
             self.db.add(record)
             self.db.commit()
             sent = []
@@ -88,15 +146,16 @@ class CustomerDispatchTests(unittest.IsolatedAsyncioTestCase):
                 def _configured(self, recipient): pass
                 async def prepare_file(self, upload, caption, recipient):
                     return PreparedMedia(await upload.read(), upload.filename, upload.content_type, "document", caption)
-                async def send_prepared_file(self, prepared, recipient):
-                    sent.append((prepared.data, prepared.filename, prepared.caption, recipient))
+                def validate_media_template(self, prepared): pass
+                async def send_template_file(self, prepared, recipient, recipient_name):
+                    sent.append((prepared.data, prepared.filename, prepared.caption, recipient, recipient_name))
                     return {"message_id": "wamid.file"}
 
             with patch.object(settings, "WHATSAPP_SEND_MODE", "live"), patch.object(settings, "UPLOAD_DIR", directory), patch("app.api.v1.endpoints.customer_dispatch.WhatsAppService", FakeService):
                 async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
                     response = await client.post(f"/api/v1/customer-dispatch/{record.id}/retry")
             self.assertEqual(response.json()["status"], "accepted")
-            self.assertEqual(sent, [(b"%PDF-test\n%%EOF", "bilty.pdf", "caption", "923001112222")])
+            self.assertEqual(sent, [(b"%PDF-test\n%%EOF", "bilty.pdf", None, "923001112222", "John")])
 
     async def test_customer_crud_search_and_reassignment(self):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
@@ -311,6 +370,7 @@ class CustomerDispatchTests(unittest.IsolatedAsyncioTestCase):
         customer = Customer(full_name="Ali", marketing_person_id=self.john.id)
         extra_customer = Customer(full_name="Fatima", phone_number="03007778888", marketing_person_id=self.sara.id)
         self.db.add_all([customer, extra_customer])
+        self.db.query(IncomingMessage).delete()
         self.db.commit()
         calls = []
 
@@ -323,18 +383,20 @@ class CustomerDispatchTests(unittest.IsolatedAsyncioTestCase):
             async def prepare_file(self, upload, caption, recipient):
                 return PreparedMedia(b"%PDF-1.4\n%%EOF", "bilty.pdf", "application/pdf", "document", caption)
 
-            async def send_prepared_file(self, prepared, recipient):
-                calls.append(recipient)
+            def validate_media_template(self, prepared): pass
+
+            async def send_template_file(self, prepared, recipient, recipient_name):
+                calls.append((recipient, recipient_name))
                 return {"message_id": f"wamid.media.{len(calls)}", "status": "accepted"}
 
         with TemporaryDirectory() as directory, patch.object(settings, "UPLOAD_DIR", directory), patch.object(settings, "WHATSAPP_SEND_MODE", "test"), patch.object(settings, "WHATSAPP_CUSTOMER_TEST_RECIPIENT", "+15557654321"), patch("app.api.v1.endpoints.customer_dispatch.WhatsAppService", FakeService):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post("/api/v1/customer-dispatch/media", data={
-                    "customer_id": str(customer.id), "include_customer": "true", "caption": "Bilty",
+                    "customer_id": str(customer.id), "include_customer": "true",
                     "additional_marketing_person_ids": str(self.sara.id), "additional_customer_ids": str(extra_customer.id),
                 }, files={"file": ("bilty.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(calls, ["15551234567", "15557654321", "15551234567", "15557654321"])
+        self.assertEqual(calls, [("15551234567", "John"), ("15557654321", "Ali"), ("15551234567", "Sara"), ("15557654321", "Fatima")])
         self.assertEqual(len(response.json()["results"]), 4)
 
     async def test_partial_failure_keeps_separate_destination_results(self):

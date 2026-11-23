@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
+from starlette.datastructures import Headers
 
 from app.api.deps import CurrentUser, get_db
 from app.config import settings
@@ -188,6 +189,52 @@ async def send_customer_text(payload: CustomerTextMessage, current_user: Current
         raise HTTPException(status_code=422, detail="Message cannot be empty.")
     customer, destinations = _destinations(db, payload.customer_id, payload.include_customer, payload.additional_marketing_person_ids, payload.additional_customer_ids)
     return await _send(db, current_user.id, customer, destinations, message)
+
+
+@router.post("/{dispatch_id}/retry", response_model=SendResult)
+async def retry_dispatch(dispatch_id: int, current_user: CurrentUser, db: Session = Depends(get_db)):
+    record = db.get(Dispatch, dispatch_id)
+    if not record or record.send_mode not in ("customer_dispatch", "customer_test"):
+        raise HTTPException(404, "Dispatch not found.")
+    if record.whatsapp_status != "failed":
+        raise HTTPException(409, "Only failed dispatches can be retried.")
+    if record.original_filename and not record.file_path:
+        raise HTTPException(410, "The original attachment has been removed and cannot be retried.")
+    if (record.send_mode == "customer_test") != (_mode() == "test"):
+        raise HTTPException(409, "The sending mode has changed since this dispatch; send a new message instead.")
+    number = _number(record.actual_recipient or "")
+    service = WhatsAppService()
+    prepared = None
+    try:
+        service._configured(number)
+        if record.file_path:
+            path = Path(record.file_path).resolve()
+            if not path.is_relative_to(Path(settings.UPLOAD_DIR).resolve()) or not path.is_file():
+                raise HTTPException(404, "The original attachment is no longer available.")
+            mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".pdf": "application/pdf"}.get(path.suffix.lower())
+            with path.open("rb") as source:
+                upload = UploadFile(file=source, filename=record.original_filename or path.name, headers=Headers({"content-type": mime or ""}))
+                prepared = await service.prepare_file(upload, record.message_text, number)
+    except WhatsAppError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+
+    claimed = db.query(Dispatch).filter(Dispatch.id == dispatch_id, Dispatch.whatsapp_status == "failed").update(
+        {Dispatch.whatsapp_status: "pending", Dispatch.failure_reason: None, Dispatch.whatsapp_message_id: None}, synchronize_session=False
+    )
+    db.commit()
+    if not claimed:
+        raise HTTPException(409, "This dispatch is already being retried or has changed.")
+    db.refresh(record)
+    try:
+        sent = await (service.send_prepared_file(prepared, number) if prepared else service.send_text(record.message_text or "", number))
+        record.whatsapp_status = "accepted"
+        record.whatsapp_message_id = sent["message_id"]
+    except WhatsAppError as exc:
+        record.whatsapp_status = "unknown" if exc.status_code == 504 else "failed"
+        record.failure_reason = str(exc)
+    db.commit()
+    return SendResult(record_id=record.id, recipient_kind=record.recipient_kind or "", recipient_name=record.recipient_name or "",
+                      actual_recipient=number, status=record.whatsapp_status, message_id=record.whatsapp_message_id, error=record.failure_reason)
 
 
 @router.post("/media", response_model=SendResponse)

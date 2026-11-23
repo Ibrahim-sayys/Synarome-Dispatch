@@ -1,6 +1,6 @@
 <div class="conversation-thread" #thread>
   @if (hasOlder()) { <button type="button" class="load-older" [disabled]="loadingOlder()" (click)="requestOlder()">{{ loadingOlder() ? 'Loading older messages...' : 'Load older messages' }}</button> }
-  @if (error() || downloadError()) { <p class="history-error" role="alert">{{ error() || downloadError() }}</p> }
+  @if (error() || downloadError() || retryError()) { <p class="history-error" role="alert">{{ error() || downloadError() || retryError() }}</p> }
   @if (loading()) { <p class="history-loading">Loading messages...</p> }
   @else {
     @for (entry of entries(); track entry.record.id) {
@@ -14,8 +14,12 @@
             @else { <div class="image-placeholder">{{ previewErrors().has(entry.record.id) ? 'Image unavailable' : 'Loading image...' }}</div> }
           } @else if (entry.record.file_path) {
             <button type="button" class="message-document" (click)="downloadAttachment(entry.record)"><span class="document-icon" aria-hidden="true">&#128196;</span><span class="document-label">{{ entry.record.original_filename || (isPdf(entry.record) ? 'Bilty PDF' : 'Attachment') }}<small>Click to download</small></span><span class="document-download" aria-hidden="true">&#8595;</span></button>
+          } @else if (entry.record.original_filename) {
+            <div class="image-placeholder">Attachment removed: {{ entry.record.original_filename }}</div>
           }
           @if (entry.record.message_text) { <p class="message-text">{{ entry.record.message_text }}</p> }
+          @if (entry.record.failure_reason) { <p class="message-error">{{ entry.record.failure_reason }}</p> }
+          @if (entry.record.whatsapp_status === 'failed' && (!entry.record.original_filename || entry.record.file_path) && (entry.record.send_mode === 'customer_dispatch' || entry.record.send_mode === 'customer_test')) { <button type="button" class="retry-button" [disabled]="retrying().has(entry.record.id)" (click)="retry(entry.record)">{{ retrying().has(entry.record.id) ? 'Retrying...' : 'Try again' }}</button> }
           <div class="message-footer"><span class="message-status">{{ status(entry.record) }}</span><time>{{ entry.timestamp ? (entry.timestamp | date:'d MMM y, h:mm a') : 'Time unavailable' }}</time></div>
         </article>
       </div>

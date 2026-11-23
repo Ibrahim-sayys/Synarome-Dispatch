@@ -203,6 +203,9 @@ nav a.active {
   animation: scaleIn 0.2s ease-out;
 }
 
+.retention-modal { max-height: 90vh; overflow-y: auto; }
+.retention-modal p:not(.eyebrow):not(.error) { color: var(--text-muted); font-size: .88rem; line-height: 1.5; margin: 0; }
+
 @keyframes scaleIn {
   from {
     opacity: 0;

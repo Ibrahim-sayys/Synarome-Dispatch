@@ -1,11 +1,30 @@
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
+from app.services.media_retention import tick
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async def cleanup_loop():
+        while True:
+            await asyncio.to_thread(tick)
+            await asyncio.sleep(60)
+    task = asyncio.create_task(cleanup_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 app = FastAPI(
     title="Synarome Dispatch API",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

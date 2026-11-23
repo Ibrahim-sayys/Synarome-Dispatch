@@ -4,6 +4,7 @@ import { EMPTY, Observable, expand, reduce } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { MarketingPerson } from './contacts.service';
 import { AuthUser } from './auth.service';
+import { SendResult } from './customer-dispatch.service';
 
 export interface DispatchRecipient {
   id: number;
@@ -118,6 +119,10 @@ export class DispatchService {
 
   getStats(): Observable<DispatchStats> {
     return this.http.get<DispatchStats>(`${this.baseUrl}/stats`);
+  }
+
+  retry(dispatchId: number): Observable<SendResult> {
+    return this.http.post<SendResult>(`${environment.apiBaseUrl}/api/v1/customer-dispatch/${dispatchId}/retry`, {});
   }
 
   downloadFile(dispatchId: number): Observable<Blob> {

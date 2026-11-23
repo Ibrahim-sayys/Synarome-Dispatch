@@ -34,7 +34,7 @@ def _successful_dispatches():
     """Show customer send attempts, accepted demos, and successful legacy sends."""
     return or_(
         Dispatch.send_mode.in_(["customer_dispatch", "customer_test"]),
-        and_(Dispatch.send_mode == "whatsapp_test", Dispatch.whatsapp_status == "accepted"),
+        and_(Dispatch.send_mode == "whatsapp_test", Dispatch.whatsapp_status.in_(["accepted", "sent", "delivered", "read"])),
         and_(
             Dispatch.send_mode == "contact",
             Dispatch.recipients.any(DispatchRecipient.delivery_status == "sent"),
@@ -218,11 +218,11 @@ def dispatch_stats(
     )
     messages_sent += (
         db.query(func.count(Dispatch.id))
-        .filter(Dispatch.send_mode == "whatsapp_test", Dispatch.whatsapp_status == "accepted")
+        .filter(Dispatch.send_mode == "whatsapp_test", Dispatch.whatsapp_status.in_(["accepted", "sent", "delivered", "read"]))
         .scalar()
         or 0
     )
-    messages_sent += db.query(func.count(Dispatch.id)).filter(Dispatch.send_mode.in_(["customer_dispatch", "customer_test"]), Dispatch.whatsapp_status == "accepted").scalar() or 0
+    messages_sent += db.query(func.count(Dispatch.id)).filter(Dispatch.send_mode.in_(["customer_dispatch", "customer_test"]), Dispatch.whatsapp_status.in_(["accepted", "sent", "delivered", "read"])).scalar() or 0
     messages_failed = (
         db.query(func.count(DispatchRecipient.id))
         .filter(DispatchRecipient.delivery_status.in_(["failed", "not_configured"]))

@@ -71,4 +71,18 @@ The backend accepts Meta webhooks at `/api/v1/whatsapp/webhook`. Set `WHATSAPP_W
 
 Expose the backend over public HTTPS (see [ngrok.md](ngrok.md) for local testing), then enter the complete URL, for example `https://your-domain.example/api/v1/whatsapp/webhook`, and the same verify token in the WhatsApp webhook configuration in Meta's app dashboard. Subscribe to the `messages` field and ensure the WhatsApp Business Account is subscribed to the app. Test by sending a message and checking dispatch history after delivery or reading. A local tunnel must remain running; use a stable public URL in production.
 
-Signed delivery updates change the existing message status to sent, delivered, read or failed. Incoming message content is ignored. Read status depends on WhatsApp providing a read receipt. Messages sent before webhook setup may not have delivery updates, and a status received before its message ID is saved is retried while a send is pending.
+Signed delivery updates change the existing message status to sent, delivered, read or failed. Read status depends on WhatsApp providing a read receipt. Messages sent before webhook setup may not have delivery updates, and a status received before its message ID is saved is retried while a send is pending.
+
+## Incoming replies
+
+Run `alembic upgrade head` after deploying the incoming-message changes. Subscribe to Meta's `messages` webhook field and use the phone number ID belonging to the same business number configured in the backend. The backend verifies signatures and records new incoming text and attachment metadata; duplicate webhook deliveries are ignored. Incoming messages received before this feature is active are not imported.
+
+Messages appear in customer or marketing-person chats when their WhatsApp sender number matches the saved phone number, including local numbers normalized using `WHATSAPP_DEFAULT_COUNTRY_CODE`. If multiple saved people share that number, the message appears in each matching chat. Incoming messages from unknown numbers remain stored but are not shown in a conversation until that number is saved. In the customer dispatch conversation, a marketing person's explicit reply to a specific dispatch is also shown when the reply refers to that dispatch. Chats refresh while open.
+
+Received image and document previews are fetched from Meta when opened; the application stores their metadata, not a permanent local copy. They may become unavailable when Meta no longer retains them. The app's local attachment-cleanup schedule does not apply to those remote files. Some WhatsApp message types show a placeholder rather than a full preview.
+
+## Custom text and the 24-hour reply window
+
+The dispatch screen allows free-form text only when every selected destination has an incoming message recorded in the previous 24 hours. Attachment templates remain available when the window is closed. In test mode the app checks the actual configured test destinations, not the selected contacts' numbers. A reply is normally reflected on the open dispatch screen within 15 seconds; the backend checks again when sending and before retrying failed text.
+
+The check uses signed incoming events stored by this app. If the webhook is offline, misconfigured, or the reply arrived before incoming-message storage was enabled, the app cannot confirm that reply and conservatively treats the window as closed. Meta remains authoritative and can still reject a send. Keep the webhook publicly reachable over HTTPS, subscribe to `messages`, and verify the business phone number and app secret.

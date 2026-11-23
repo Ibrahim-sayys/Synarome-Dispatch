@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { Observable, of } from 'rxjs';
+import { EMPTY, Observable, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CustomerDispatchService, SendMode } from '../../core/customer-dispatch.service';
+import { CustomerDispatchService, SendMode, WindowStatus } from '../../core/customer-dispatch.service';
 import { ScannerService } from '../../core/scanner.service';
 import { CustomersService } from '../../core/customers.service';
 import { ContactsService } from '../../core/contacts.service';
@@ -18,17 +18,20 @@ describe('Customer dispatch flow', () => {
   const customers = { list: vi.fn((_search: string, page: number, _size: number) => of({ items: [ali], total: 1, page, page_size: 20 })) };
   const dispatch = {
     mode: vi.fn((): Observable<SendMode> => of({ mode: 'live', test_recipient: null, customer_test_recipient: null })),
+    windowStatus: vi.fn((): Observable<WindowStatus> => of({ all_open: true, recipients: [] })),
     send: vi.fn(() => of({ mode: 'live', results: [{
       record_id: 1, recipient_kind: 'marketing_person', recipient_name: 'John', actual_recipient: '923001112222',
       status: 'accepted', message_id: 'wamid.test', error: null,
     }] })),
   };
-  const history = { listFullHistory: vi.fn(() => of([] as DispatchRecord[])) };
+  const history = { listFullHistory: vi.fn(() => of([] as DispatchRecord[])), monitorStatuses: () => EMPTY };
 
   beforeEach(async () => {
     customers.list.mockClear();
     customers.list.mockImplementation((_search, page) => of({ items: [ali], total: 1, page, page_size: 20 }));
     dispatch.send.mockClear();
+    dispatch.windowStatus.mockReset();
+    dispatch.windowStatus.mockReturnValue(of({ all_open: true, recipients: [] }));
     history.listFullHistory.mockClear();
     history.listFullHistory.mockReturnValue(of([]));
     dispatch.mode.mockReturnValue(of({ mode: 'live', test_recipient: null, customer_test_recipient: null }));
@@ -65,6 +68,21 @@ describe('Customer dispatch flow', () => {
     fixture.detectChanges();
     element.querySelector<HTMLButtonElement>('.send-button')!.click();
     expect(dispatch.send).toHaveBeenLastCalledWith(1, true, 'Bilty dispatched', null, [], []);
+    fixture.destroy();
+  });
+
+  it('locks custom text when a selected recipient has no recent reply', async () => {
+    dispatch.windowStatus.mockReturnValue(of({ all_open: false, recipients: [{ name: 'John', number: '923001112222', open: false, expires_at: null }] }));
+    const fixture = TestBed.createComponent(DispatchPage);
+    fixture.detectChanges(); await fixture.whenStable();
+    const element = fixture.nativeElement as HTMLElement;
+    element.querySelector<HTMLButtonElement>('.customer-choice')!.click();
+    fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();
+    expect(element.querySelector<HTMLTextAreaElement>('textarea')).toBeNull();
+    expect(element.textContent).toContain('Template attachments only');
+    expect(element.textContent).toContain('John: no recent reply');
+    expect(element.querySelector<HTMLButtonElement>('.attach-button')!.disabled).toBe(false);
+    expect(dispatch.send).not.toHaveBeenCalled();
     fixture.destroy();
   });
 
@@ -210,7 +228,7 @@ describe('Customer dispatch flow', () => {
     }
   });
 
-  it('sends multiple attachments in order with the caption on the first', async () => {
+  it('sends multiple template attachments in order without typed captions', async () => {
     const fixture = TestBed.createComponent(DispatchPage);
     fixture.detectChanges(); await fixture.whenStable();
     const element = fixture.nativeElement as HTMLElement;
@@ -221,10 +239,11 @@ describe('Customer dispatch flow', () => {
     Object.defineProperty(fileInput, 'files', { configurable: true, value: [first, second] });
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     const textarea = element.querySelector<HTMLTextAreaElement>('textarea')!;
-    textarea.value = 'Caption'; textarea.dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    fixture.detectChanges();
+    expect(textarea.readOnly).toBe(true);
     expect(element.querySelectorAll('.attachment-preview')).toHaveLength(2);
     element.querySelector<HTMLButtonElement>('.send-button')!.click(); fixture.detectChanges();
-    expect(dispatch.send).toHaveBeenNthCalledWith(1, 1, false, 'Caption', first, [], []);
+    expect(dispatch.send).toHaveBeenNthCalledWith(1, 1, false, '', first, [], []);
     expect(dispatch.send).toHaveBeenNthCalledWith(2, 1, false, '', second, [], []);
     expect(element.querySelectorAll('.attachment-preview')).toHaveLength(0);
     expect(element.textContent).toContain('first.pdf');

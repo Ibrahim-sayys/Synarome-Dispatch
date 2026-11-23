@@ -411,6 +411,7 @@ strong {
   border: 1px solid var(--success-border);
   border-radius: 17px 17px 5px 17px;
   box-shadow: var(--shadow-sm);
+  box-sizing: border-box;
   max-width: min(590px, 78%);
   min-width: min(220px, 100%);
   padding: 12px 14px 9px;
@@ -453,7 +454,7 @@ strong {
 
 .message-document:hover:not(:disabled) { background: var(--surface-hover); box-shadow: var(--shadow-sm); transform: none; }
 .document-icon { font-size: 1.5rem; line-height: 1; }
-.document-label { flex: 1; font-size: 0.85rem; min-width: 0; }
+.document-label { flex: 1; font-size: 0.85rem; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 .document-label small { color: var(--text-muted); display: block; font-size: 0.72rem; font-weight: 500; margin-top: 2px; }
 .document-download { color: var(--primary); font-size: 1.15rem; }
 
@@ -528,3 +529,5 @@ strong {
   .conversation-thread { padding: 18px 12px; }
   .message-bubble { max-width: 93%; }
 }
+.conversation-row.incoming-row { justify-content: flex-start; }
+.incoming-row .message-bubble { background: var(--surface); border-color: var(--border); border-radius: 17px 17px 17px 5px; }

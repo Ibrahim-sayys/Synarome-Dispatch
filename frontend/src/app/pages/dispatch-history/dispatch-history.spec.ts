@@ -1,13 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { of } from 'rxjs';
+import { EMPTY, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DispatchService } from '../../core/dispatch.service';
 import { DispatchHistoryPage } from './dispatch-history';
 
 describe('Dispatch history filters', () => {
   const dispatchService = {
+    monitorStatuses: () => EMPTY,
     listHistoryPage: vi.fn((_filters: unknown, page: number) => of({ items: [], total: 0, page, page_size: 20 })),
     listHistorySenders: vi.fn(() => of([
       { id: 1, username: 'alice' },

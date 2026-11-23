@@ -94,6 +94,43 @@ class WhatsAppService:
             media["filename"] = prepared.filename
         return await self._send(prepared.kind, media, recipient)
 
+    def validate_media_template(self, prepared: PreparedMedia) -> tuple[str, str, str]:
+        prefix = "IMAGE" if prepared.kind == "image" else "DOCUMENT"
+        name = getattr(settings, f"WHATSAPP_{prefix}_TEMPLATE_NAME").strip()
+        language = getattr(settings, f"WHATSAPP_{prefix}_TEMPLATE_LANGUAGE").strip()
+        parameter_name = getattr(settings, f"WHATSAPP_{prefix}_TEMPLATE_NAME_PARAMETER").strip()
+        if not name or not language or name.startswith("replace_with_") or language.startswith("replace_with_"):
+            raise WhatsAppError(f"Configure the approved {prefix.lower()} template name and language in the backend environment.", 503)
+        if prepared.caption:
+            raise WhatsAppError("The attachment template contains a recipient name only. Remove the typed message before sending the attachment.", 422)
+        if parameter_name and not re.fullmatch(r"[a-z][a-z0-9_]*", parameter_name):
+            raise WhatsAppError(
+                f"Invalid WHATSAPP_{prefix}_TEMPLATE_NAME_PARAMETER: leave it empty for {{{{1}}}}, "
+                "or enter the exact lowercase variable name without braces (for example customer_name).", 503
+            )
+        return name, language, parameter_name
+
+    async def send_template_file(self, prepared: PreparedMedia, recipient: str | None = None, recipient_name: str = "") -> dict[str, str]:
+        self._configured(recipient)
+        name, language, parameter_name = self.validate_media_template(prepared)
+        recipient_name = recipient_name.strip()
+        if not recipient_name:
+            raise WhatsAppError("The recipient needs a name for the WhatsApp template.", 422)
+        response = await self._post("media", data={"messaging_product": "whatsapp", "type": prepared.mime},
+                                    files={"file": (prepared.filename, prepared.data, prepared.mime)}, timeout=90)
+        media_id = response.get("id")
+        if not isinstance(media_id, str) or not media_id:
+            raise WhatsAppError("Meta accepted the upload but returned no media ID.")
+        media = {"id": media_id}
+        if prepared.kind == "document":
+            media["filename"] = prepared.filename
+        components: list[dict[str, Any]] = [{"type": "header", "parameters": [{"type": prepared.kind, prepared.kind: media}]}]
+        parameter = {"type": "text", "text": recipient_name}
+        if parameter_name:
+            parameter["parameter_name"] = parameter_name
+        components.append({"type": "body", "parameters": [parameter]})
+        return await self._send("template", {"name": name, "language": {"code": language}, "components": components}, recipient)
+
     async def _send(self, kind: str, content: dict[str, Any], recipient: str | None = None) -> dict[str, str]:
         response = await self._post("messages", json={"messaging_product": "whatsapp", "recipient_type": "individual", "to": recipient or self.recipient, "type": kind, kind: content}, timeout=30)
         messages = response.get("messages")

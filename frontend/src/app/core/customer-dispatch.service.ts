@@ -15,6 +15,7 @@ export interface SendResult {
 
 export interface SendResponse { mode: 'test' | 'live'; results: SendResult[]; }
 export interface SendMode { mode: 'test' | 'live'; test_recipient: string | null; customer_test_recipient: string | null; }
+export interface WindowStatus { all_open: boolean; recipients: { name: string; number: string; open: boolean; expires_at: string | null }[]; }
 
 @Injectable({ providedIn: 'root' })
 export class CustomerDispatchService {
@@ -22,6 +23,13 @@ export class CustomerDispatchService {
   private readonly url = `${environment.apiBaseUrl}/api/v1/customer-dispatch`;
 
   mode(): Observable<SendMode> { return this.http.get<SendMode>(`${this.url}/mode`); }
+
+  windowStatus(customerId: number, includeCustomer: boolean, marketingIds: number[], customerIds: number[]): Observable<WindowStatus> {
+    return this.http.post<WindowStatus>(`${this.url}/window-status`, {
+      customer_id: customerId, include_customer: includeCustomer,
+      additional_marketing_person_ids: marketingIds, additional_customer_ids: customerIds,
+    });
+  }
 
   send(customerId: number, includeCustomer: boolean, message: string, file: File | null, additionalMarketingPersonIds: number[] = [], additionalCustomerIds: number[] = []): Observable<SendResponse> {
     if (!file) return this.http.post<SendResponse>(`${this.url}/text`, {

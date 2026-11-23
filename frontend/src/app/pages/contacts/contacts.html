@@ -127,9 +127,9 @@
             @if (entry.showDate) {
               <div class="conversation-date">{{ entry.timestamp ? (entry.timestamp | date:'EEEE, d MMM y') : 'Date unavailable' }}</div>
             }
-            <div class="conversation-row">
+            <div class="conversation-row" [class.incoming-row]="entry.record.direction === 'incoming'">
               <article class="message-bubble" [class.message-failed]="contactStatus(entry.record, contact.id) === 'Failed'">
-                <div class="message-sender">{{ entry.record.sender?.username || 'Unknown sender' }}</div>
+                <div class="message-sender">{{ entry.record.direction === 'incoming' ? (entry.record.recipient_name || entry.record.actual_recipient || contact.full_name) : (entry.record.sender?.username || 'Unknown sender') }}</div>
                 @if (entry.record.send_mode === 'whatsapp_test') {
                   <div class="test-destination">Demo selection · Actual send to {{ entry.record.actual_recipient }}</div>
                 }
@@ -156,6 +156,7 @@
                 @if (entry.record.message_text) {
                   <p class="message-text">{{ entry.record.message_text }}</p>
                 }
+                @if (entry.record.direction === 'incoming' && !entry.record.message_text && !entry.record.file_path) { <p class="message-text">Received {{ entry.record.incoming_type || 'message' }} (preview unavailable)</p> }
 
                 <div class="message-footer">
                   <span class="message-status">{{ contactStatus(entry.record, contact.id) }}</span>

@@ -4,31 +4,14 @@
       <p class="eyebrow">Recipient directory</p>
       <h2>Marketing persons</h2>
     </div>
-    <label class="search">
-      Search
-      <input type="search" placeholder="Search contacts..." [value]="searchTerm()" (input)="search($any($event.target).value)" />
-    </label>
   </div>
 
   @if (message()) {
     <p class="message" [class.error-message]="isErrorMessage()" [attr.role]="isErrorMessage() ? 'alert' : 'status'">{{ message() }}</p>
   }
 
-  <form [formGroup]="contactForm" (ngSubmit)="saveContact()" class="contact-form">
-    <label>
-      Full name
-      <input type="text" placeholder="e.g. Muhammad Usman" formControlName="full_name" autocomplete="off" />
-    </label>
-
-    <label>
-      Phone number
-      <input type="tel" placeholder="03xxxxxxxx" formControlName="phone_number" autocomplete="off" />
-    </label>
-
-    <button type="submit" [disabled]="contactForm.invalid || isSaving()">
-      {{ isSaving() ? 'Saving...' : 'Add contact' }}
-    </button>
-  </form>
+  <div class="directory-search-row"><label class="search">Search marketing persons<input type="search" placeholder="Name or phone number" [value]="searchTerm()" (input)="search($any($event.target).value)" /></label></div>
+  <div class="directory-summary-row"><div class="list-summary">{{ filteredContacts().length }} marketing persons</div><button type="button" class="add-directory-button" (click)="openAddDialog()">+ Add New Marketing Person</button></div>
 
   <div class="contact-list">
     @for (contact of filteredContacts(); track contact.id) {
@@ -36,14 +19,14 @@
         <div>
           <strong>{{ contact.full_name }}</strong>
           <p>{{ contact.phone_number }}</p>
-          <small class="contact-hint">Click to view messages</small>
         </div>
         <span [class.inactive]="!contact.is_active">{{ contact.is_active ? 'Active' : 'Inactive' }}</span>
         <p class="suspended-by">
           {{ contact.is_active ? '' : 'Suspended by ' + (contact.suspended_by_username || 'unknown') }}
         </p>
-        <div class="actions" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()">
-          <button type="button" class="icon-button" [attr.aria-label]="'More actions for ' + contact.full_name" [attr.aria-expanded]="openMenuId() === contact.id" aria-haspopup="menu" (click)="toggleMenu(contact.id)">
+        <div class="actions" (click)="onActionsClick($event)" (keydown.enter)="$event.stopPropagation()">
+          <button type="button" class="messages-button" (click)="openContactHistory(contact)">View messages</button>
+          <button type="button" class="icon-button contact-menu-trigger" [attr.aria-label]="'More actions for ' + contact.full_name" [attr.aria-expanded]="openMenuId() === contact.id" aria-haspopup="menu" (click)="toggleMenu(contact.id)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
           </button>
           <button type="button" class="icon-button delete-icon-button" [attr.aria-label]="'Delete ' + contact.full_name" [title]="'Delete ' + contact.full_name" (click)="openDeleteDialog(contact)">
@@ -61,6 +44,18 @@
   </div>
 </section>
 
+@if (isAddOpen()) {
+  <div class="modal-backdrop">
+    <form class="edit-modal" role="dialog" aria-modal="true" aria-label="Add new marketing person" [formGroup]="contactForm" (ngSubmit)="saveContact()" (click)="$event.stopPropagation()">
+      <div><p class="eyebrow">Recipient directory</p><h2>Add new marketing person</h2></div>
+      @if (message() && isErrorMessage()) { <p class="message error-message" role="alert">{{ message() }}</p> }
+      <label><span>Full name <span class="required-indicator" aria-label="required">*</span></span><input type="text" placeholder="e.g. Muhammad Usman" formControlName="full_name" autocomplete="off" /></label>
+      <label><span>Phone number <span class="required-indicator" aria-label="required">*</span></span><input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="15" placeholder="03xxxxxxxxx" formControlName="phone_number" autocomplete="off" (input)="digitsOnly($event, 'add')" /></label>
+      <div class="modal-actions"><button type="button" class="secondary" [disabled]="isSaving()" (click)="closeAddDialog()">Cancel</button><button type="submit" [disabled]="contactForm.invalid || isSaving()">{{ isSaving() ? 'Saving...' : 'Add marketing person' }}</button></div>
+    </form>
+  </div>
+}
+
 @if (editingContact()) {
   <div class="modal-backdrop">
     <form class="edit-modal" [formGroup]="editForm" (ngSubmit)="updateContact()">
@@ -70,13 +65,13 @@
       </div>
 
       <label>
-        Full name
+        <span>Full name <span class="required-indicator" aria-label="required">*</span></span>
         <input type="text" placeholder="e.g. Muhammad Usman" formControlName="full_name" autocomplete="off" />
       </label>
 
       <label>
-        Phone number
-        <input type="tel" placeholder="03xxxxxxxx" formControlName="phone_number" autocomplete="off" />
+        <span>Phone number <span class="required-indicator" aria-label="required">*</span></span>
+        <input type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="15" placeholder="03xxxxxxxxx" formControlName="phone_number" autocomplete="off" (input)="digitsOnly($event, 'edit')" />
       </label>
 
       <div class="modal-actions">
@@ -88,7 +83,7 @@
 }
 
 @if (deleteTarget(); as contact) {
-  <div class="modal-backdrop" (click)="closeDeleteDialog()">
+  <div class="modal-backdrop">
     <section class="edit-modal delete-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Delete ' + contact.full_name" (click)="$event.stopPropagation()">
       <div>
         <p class="eyebrow">Delete contact</p>
@@ -104,7 +99,7 @@
 }
 
 @if (selectedContact(); as contact) {
-  <div class="modal-backdrop" (click)="closeContactHistory()">
+  <div class="modal-backdrop">
     <section class="history-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Messages sent to ' + contact.full_name" (click)="$event.stopPropagation()">
       <div class="history-modal-header">
         <div class="history-contact-identity">
@@ -115,7 +110,10 @@
             <p class="modal-copy">{{ contact.phone_number }} · {{ contactHistory().length }} message{{ contactHistory().length === 1 ? '' : 's' }}</p>
           </div>
         </div>
-        <button type="button" class="secondary close-button" (click)="closeContactHistory()" aria-label="Close">&times;</button>
+        <div class="history-header-actions">
+          <label class="chat-search"><span class="visually-hidden">Search messages in {{ contact.full_name }}'s chat</span><input type="search" placeholder="Search this chat" [value]="historySearch()" (input)="searchHistory($any($event.target).value)" /></label>
+          <button type="button" class="secondary close-button" (click)="closeContactHistory()" aria-label="Close">&times;</button>
+        </div>
       </div>
 
       <div class="conversation-thread" #conversationThread>
@@ -129,11 +127,14 @@
             @if (entry.showDate) {
               <div class="conversation-date">{{ entry.timestamp ? (entry.timestamp | date:'EEEE, d MMM y') : 'Date unavailable' }}</div>
             }
-            <div class="conversation-row">
+            <div class="conversation-row" [class.incoming-row]="entry.record.direction === 'incoming'">
               <article class="message-bubble" [class.message-failed]="contactStatus(entry.record, contact.id) === 'Failed'">
-                <div class="message-sender">{{ entry.record.sender?.username || 'Unknown sender' }}</div>
+                <div class="message-sender">{{ entry.record.direction === 'incoming' ? (entry.record.recipient_name || entry.record.actual_recipient || contact.full_name) : (entry.record.sender?.username || 'Unknown sender') }}</div>
                 @if (entry.record.send_mode === 'whatsapp_test') {
                   <div class="test-destination">Demo selection · Actual send to {{ entry.record.actual_recipient }}</div>
+                }
+                @if (entry.record.customer_id) {
+                  <div class="test-destination">Customer {{ entry.record.customer_name }} · To {{ entry.record.recipient_name || contact.full_name }} · {{ entry.record.actual_recipient }}</div>
                 }
 
                 @if (isImage(entry.record)) {
@@ -155,6 +156,7 @@
                 @if (entry.record.message_text) {
                   <p class="message-text">{{ entry.record.message_text }}</p>
                 }
+                @if (entry.record.direction === 'incoming' && !entry.record.message_text && !entry.record.file_path) { <p class="message-text">Received {{ entry.record.incoming_type || 'message' }} (preview unavailable)</p> }
 
                 <div class="message-footer">
                   <span class="message-status">{{ contactStatus(entry.record, contact.id) }}</span>
@@ -163,7 +165,7 @@
               </article>
             </div>
           } @empty {
-            <div class="history-empty-state">No successful dispatch messages for this contact yet.</div>
+            <div class="history-empty-state">{{ historySearch().trim() ? 'No matching messages.' : 'No successful dispatch messages for this contact yet.' }}</div>
           }
         }
       </div>
@@ -172,7 +174,7 @@
 }
 
 @if (expandedImage(); as image) {
-  <div class="image-expanded-backdrop" (click)="expandedImage.set(null)">
+  <div class="image-expanded-backdrop">
     <div class="image-expanded-dialog" role="dialog" aria-modal="true" [attr.aria-label]="image.label" (click)="$event.stopPropagation()">
       <div class="image-expanded-header">
         <strong>{{ image.label }}</strong>

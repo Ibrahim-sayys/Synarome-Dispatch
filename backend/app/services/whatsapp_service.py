@@ -46,25 +46,25 @@ class WhatsAppService:
             raise WhatsAppError("Invalid WHATSAPP_API_VERSION configuration.", 503)
         self.base_url = f"https://graph.facebook.com/{version}/{self.phone_id}"
 
-    def _configured(self) -> None:
-        if not self.token or not self.phone_id or not re.fullmatch(r"[1-9]\d{6,14}", self.recipient):
-            raise WhatsAppError("WhatsApp test credentials or verified test recipient are missing or invalid. Check backend environment variables.", 503)
+    def _configured(self, recipient: str | None = None) -> None:
+        if not self.token or not self.phone_id or not re.fullmatch(r"[1-9]\d{6,14}", recipient or self.recipient):
+            raise WhatsAppError("WhatsApp credentials or recipient are missing or invalid. Check backend environment variables.", 503)
         if not self.phone_id.isdigit():
-            raise WhatsAppError("Invalid WhatsApp test phone number ID configuration.", 503)
+            raise WhatsAppError("Invalid WhatsApp phone number ID configuration.", 503)
 
-    async def send_text(self, message: str) -> dict[str, str]:
-        self._configured()
+    async def send_text(self, message: str, recipient: str | None = None) -> dict[str, str]:
+        self._configured(recipient)
         message = message.strip()
         if not message or len(message) > TEXT_LIMIT:
             raise WhatsAppError(f"Message must contain 1 to {TEXT_LIMIT} characters.", 422)
-        return await self._send("text", {"body": message, "preview_url": False})
+        return await self._send("text", {"body": message, "preview_url": False}, recipient)
 
     async def send_file(self, upload: UploadFile, caption: str | None = None) -> dict[str, str]:
         prepared = await self.prepare_file(upload, caption)
         return await self.send_prepared_file(prepared)
 
-    async def prepare_file(self, upload: UploadFile, caption: str | None = None) -> PreparedMedia:
-        self._configured()
+    async def prepare_file(self, upload: UploadFile, caption: str | None = None, recipient: str | None = None) -> PreparedMedia:
+        self._configured(recipient)
         caption = (caption or "").strip()
         if len(caption) > CAPTION_LIMIT:
             raise WhatsAppError(f"Caption cannot exceed {CAPTION_LIMIT} characters.", 422)
@@ -81,8 +81,8 @@ class WhatsAppService:
             raise WhatsAppError("File contents do not match a valid JPG, PNG, or PDF.", 415)
         return PreparedMedia(data, filename, mime, "document" if mime == "application/pdf" else "image", caption)
 
-    async def send_prepared_file(self, prepared: PreparedMedia) -> dict[str, str]:
-        self._configured()
+    async def send_prepared_file(self, prepared: PreparedMedia, recipient: str | None = None) -> dict[str, str]:
+        self._configured(recipient)
         response = await self._post("media", data={"messaging_product": "whatsapp", "type": prepared.mime}, files={"file": (prepared.filename, prepared.data, prepared.mime)}, timeout=90)
         media_id = response.get("id")
         if not isinstance(media_id, str) or not media_id:
@@ -92,10 +92,47 @@ class WhatsAppService:
             media["caption"] = prepared.caption
         if prepared.kind == "document":
             media["filename"] = prepared.filename
-        return await self._send(prepared.kind, media)
+        return await self._send(prepared.kind, media, recipient)
 
-    async def _send(self, kind: str, content: dict[str, Any]) -> dict[str, str]:
-        response = await self._post("messages", json={"messaging_product": "whatsapp", "recipient_type": "individual", "to": self.recipient, "type": kind, kind: content}, timeout=30)
+    def validate_media_template(self, prepared: PreparedMedia) -> tuple[str, str, str]:
+        prefix = "IMAGE" if prepared.kind == "image" else "DOCUMENT"
+        name = getattr(settings, f"WHATSAPP_{prefix}_TEMPLATE_NAME").strip()
+        language = getattr(settings, f"WHATSAPP_{prefix}_TEMPLATE_LANGUAGE").strip()
+        parameter_name = getattr(settings, f"WHATSAPP_{prefix}_TEMPLATE_NAME_PARAMETER").strip()
+        if not name or not language or name.startswith("replace_with_") or language.startswith("replace_with_"):
+            raise WhatsAppError(f"Configure the approved {prefix.lower()} template name and language in the backend environment.", 503)
+        if prepared.caption:
+            raise WhatsAppError("The attachment template contains a recipient name only. Remove the typed message before sending the attachment.", 422)
+        if parameter_name and not re.fullmatch(r"[a-z][a-z0-9_]*", parameter_name):
+            raise WhatsAppError(
+                f"Invalid WHATSAPP_{prefix}_TEMPLATE_NAME_PARAMETER: leave it empty for {{{{1}}}}, "
+                "or enter the exact lowercase variable name without braces (for example customer_name).", 503
+            )
+        return name, language, parameter_name
+
+    async def send_template_file(self, prepared: PreparedMedia, recipient: str | None = None, recipient_name: str = "") -> dict[str, str]:
+        self._configured(recipient)
+        name, language, parameter_name = self.validate_media_template(prepared)
+        recipient_name = recipient_name.strip()
+        if not recipient_name:
+            raise WhatsAppError("The recipient needs a name for the WhatsApp template.", 422)
+        response = await self._post("media", data={"messaging_product": "whatsapp", "type": prepared.mime},
+                                    files={"file": (prepared.filename, prepared.data, prepared.mime)}, timeout=90)
+        media_id = response.get("id")
+        if not isinstance(media_id, str) or not media_id:
+            raise WhatsAppError("Meta accepted the upload but returned no media ID.")
+        media = {"id": media_id}
+        if prepared.kind == "document":
+            media["filename"] = prepared.filename
+        components: list[dict[str, Any]] = [{"type": "header", "parameters": [{"type": prepared.kind, prepared.kind: media}]}]
+        parameter = {"type": "text", "text": recipient_name}
+        if parameter_name:
+            parameter["parameter_name"] = parameter_name
+        components.append({"type": "body", "parameters": [parameter]})
+        return await self._send("template", {"name": name, "language": {"code": language}, "components": components}, recipient)
+
+    async def _send(self, kind: str, content: dict[str, Any], recipient: str | None = None) -> dict[str, str]:
+        response = await self._post("messages", json={"messaging_product": "whatsapp", "recipient_type": "individual", "to": recipient or self.recipient, "type": kind, kind: content}, timeout=30)
         messages = response.get("messages")
         message_id = messages[0].get("id") if isinstance(messages, list) and messages and isinstance(messages[0], dict) else None
         if not isinstance(message_id, str) or not message_id:
@@ -124,11 +161,11 @@ class WhatsAppService:
                 code = None
             logger.warning("WhatsApp %s failed: HTTP %s, Meta code %s", resource, response.status_code, code)
             if code == 131047:
-                raise WhatsAppError("The 24-hour customer-service window is closed. Send a WhatsApp message from the verified test recipient to Meta's test number, then retry.", 409)
+                raise WhatsAppError("The WhatsApp customer-service window is closed for this recipient. Check the recipient conversation before retrying.", 409)
             if response.status_code in (401, 403) or code in (190, 200):
-                raise WhatsAppError("Meta rejected the temporary access token. Refresh WHATSAPP_ACCESS_TOKEN and restart the backend.", 502)
+                raise WhatsAppError("Meta rejected the access token. Refresh WHATSAPP_ACCESS_TOKEN and restart the backend.", 502)
             if code in (131030, 131026):
-                raise WhatsAppError("Meta could not send to the test recipient. Verify WHATSAPP_TEST_RECIPIENT in the Meta Developer Dashboard.", 422)
+                raise WhatsAppError("Meta could not send to this recipient. Check the phone number and WhatsApp recipient eligibility.", 422)
             raise WhatsAppError(f"Meta rejected the WhatsApp {resource} request (HTTP {response.status_code}, code {code or 'unknown'}).")
         try:
             body = response.json()

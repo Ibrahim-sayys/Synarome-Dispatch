@@ -2,6 +2,7 @@ import io
 import json
 from tempfile import SpooledTemporaryFile, TemporaryDirectory
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import httpx
@@ -19,6 +20,7 @@ from app.main import app
 from app.models.dispatch import Dispatch
 from app.models.dispatch_recipient import DispatchRecipient
 from app.models.marketing_person import MarketingPerson
+from app.models.incoming_message import IncomingMessage
 from app.models.user import User, UserRole
 from app.services import whatsapp_service as module
 from app.services.whatsapp_service import WhatsAppError, WhatsAppService
@@ -70,6 +72,14 @@ class WhatsAppServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await (await self._service(handler)).send_text(" Bilty BLT-1025 dispatched ")
         self.assertEqual(result, {"message_id": "wamid.text", "status": "accepted"})
 
+    async def test_explicit_recipient_is_used_for_live_customer_dispatch(self):
+        def handler(request):
+            self.assertEqual(json.loads(request.content)["to"], "923001112222")
+            return httpx.Response(200, json={"messages": [{"id": "wamid.live"}]})
+
+        result = await (await self._service(handler)).send_text("Bilty", "923001112222")
+        self.assertEqual(result["message_id"], "wamid.live")
+
     async def test_image_upload_then_one_captioned_message(self):
         paths = []
 
@@ -88,6 +98,57 @@ class WhatsAppServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await (await self._service(handler)).send_file(upload, "Bilty image")
         self.assertEqual(result["message_id"], "wamid.image")
         self.assertEqual(paths, ["/v26.0/123456/media", "/v26.0/123456/messages"])
+
+    async def test_media_uses_explicit_live_recipient(self):
+        def handler(request):
+            if request.url.path.endswith("/media"):
+                return httpx.Response(200, json={"id": "media-live"})
+            self.assertEqual(json.loads(request.content)["to"], "923001112222")
+            return httpx.Response(200, json={"messages": [{"id": "wamid.live-media"}]})
+
+        service = await self._service(handler)
+        upload = upload_file("bilty.png", "image/png", image_bytes("PNG"))
+        self.addCleanup(upload.file.close)
+        prepared = await service.prepare_file(upload, "Copy", "923001112222")
+        result = await service.send_prepared_file(prepared, "923001112222")
+        self.assertEqual(result["message_id"], "wamid.live-media")
+
+    async def test_media_templates_select_by_type_and_supply_recipient_name(self):
+        requests = []
+        def handler(request):
+            if request.url.path.endswith('/media'):
+                return httpx.Response(200, json={'id': 'media-1'})
+            requests.append(json.loads(request.content))
+            return httpx.Response(200, json={'messages': [{'id': 'wamid.template'}]})
+
+        service = await self._service(handler)
+        with patch.object(settings, 'WHATSAPP_IMAGE_TEMPLATE_NAME', 'image_dispatch'), \
+             patch.object(settings, 'WHATSAPP_IMAGE_TEMPLATE_LANGUAGE', 'en_US'), \
+             patch.object(settings, 'WHATSAPP_IMAGE_TEMPLATE_NAME_PARAMETER', ''), \
+             patch.object(settings, 'WHATSAPP_DOCUMENT_TEMPLATE_NAME', 'document_dispatch'), \
+             patch.object(settings, 'WHATSAPP_DOCUMENT_TEMPLATE_LANGUAGE', 'en'), \
+             patch.object(settings, 'WHATSAPP_DOCUMENT_TEMPLATE_NAME_PARAMETER', 'name'):
+            for filename, mime, content, name in [('bilty.png', 'image/png', image_bytes('PNG'), 'Ali'),
+                                                  ('bilty.pdf', 'application/pdf', b'%PDF-1.4\n%%EOF', 'Sara')]:
+                upload = upload_file(filename, mime, content)
+                self.addCleanup(upload.file.close)
+                prepared = await service.prepare_file(upload, None, '923001112222')
+                await service.send_template_file(prepared, '923001112222', name)
+        self.assertEqual([r['template']['name'] for r in requests], ['image_dispatch', 'document_dispatch'])
+        self.assertEqual([r['template']['components'][0]['parameters'][0]['type'] for r in requests], ['image', 'document'])
+        self.assertEqual(requests[0]['template']['components'][1]['parameters'][0], {'type': 'text', 'text': 'Ali'})
+        self.assertEqual(requests[1]['template']['components'][1]['parameters'][0], {'type': 'text', 'text': 'Sara', 'parameter_name': 'name'})
+        self.assertTrue(all(r['to'] == '923001112222' for r in requests))
+
+    async def test_template_configuration_and_caption_fail_before_upload(self):
+        service = await self._service(lambda request: self.fail('Network should not be called'))
+        upload = upload_file('bilty.png', 'image/png', image_bytes('PNG'))
+        self.addCleanup(upload.file.close)
+        prepared = await service.prepare_file(upload, 'typed caption')
+        with patch.object(settings, 'WHATSAPP_IMAGE_TEMPLATE_NAME', 'image_dispatch'), patch.object(settings, 'WHATSAPP_IMAGE_TEMPLATE_LANGUAGE', 'en'):
+            with self.assertRaises(WhatsAppError) as error:
+                await service.send_template_file(prepared, recipient_name='Ali')
+            self.assertEqual(error.exception.status_code, 422)
 
     async def test_pdf_uses_safe_filename_and_no_duplicate_text(self):
         calls = []
@@ -176,6 +237,8 @@ class WhatsAppRouteTests(unittest.IsolatedAsyncioTestCase):
             MarketingPerson(full_name="ABC Traders", phone_number="15550000001", is_active=True),
             MarketingPerson(full_name="Ibrahim", phone_number="15550000002", is_active=True),
         ])
+        self.db.add(IncomingMessage(whatsapp_message_id='fixture-reply', sender_number='15551234567',
+                                    message_type='text', timestamp=datetime.now(timezone.utc)))
         self.db.commit()
 
         async def fake_user():

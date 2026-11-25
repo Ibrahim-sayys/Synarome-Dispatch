@@ -1,20 +1,20 @@
 # WhatsApp Cloud API local testing
 
-This integration sends outgoing free-form messages to **one verified test recipient** from Meta's test phone number. No webhook, public backend URL, production phone registration, permanent token, or template setup is needed. The verified recipient must have manually opened the 24-hour customer-service window.
+With `WHATSAPP_SEND_MODE=test`, each selected marketing person generates one send to `WHATSAPP_TEST_RECIPIENT`. Each selected customer generates one send to `WHATSAPP_CUSTOMER_TEST_RECIPIENT`; the selected end customer is included only when chosen in **Add recipient**. See [Customer dispatch](customer-dispatch.md) for the customer workflow and live routing.
 
 ## Meta dashboard setup
 
 1. Create or open your Meta Developer app and add the WhatsApp product. Open **WhatsApp > API Setup** (or **Getting Started**, depending on the dashboard layout).
 2. Under **From**, select Meta's provided test number and copy its **Phone number ID** into `WHATSAPP_PHONE_NUMBER_ID`. This is the numeric ID, not the visible phone number.
 3. Copy the dashboard's **temporary access token** into `WHATSAPP_ACCESS_TOKEN`. It expires; replace it and restart the backend when Meta reports expiration. Keep it only in the backend `.env`.
-4. Under **To**, add your own WhatsApp number and complete Meta's verification code flow. Set `WHATSAPP_TEST_RECIPIENT` to that verified international number, using digits and optional leading `+` only. Do not use a marketing contact's number.
+4. Under **To**, add your own WhatsApp number and complete Meta's verification code flow. Set `WHATSAPP_TEST_RECIPIENT` to that verified international number, using digits and optional leading `+` only. To test the optional customer copy, verify a second recipient and set `WHATSAPP_CUSTOMER_TEST_RECIPIENT` to it. Do not use a marketing contact's number for either test destination.
 5. Set `WHATSAPP_API_VERSION=v26.0` (or the supported version shown by your current Meta API setup). Copy `.env.example` to `.env` and fill all four variables. Never commit `.env`.
 
 ## Start locally
 
-The existing Docker setup is `docker compose up --build`. Run `docker compose exec backend alembic upgrade head` on **both new and existing databases** to add the WhatsApp test history fields. On a fresh database, also run `docker compose exec backend python -m app.scripts.create_super_admin --username admin` and enter a password at the prompt. The frontend runs at `http://localhost:1711`, backend at `http://localhost:1609`, and Swagger UI at `http://localhost:1609/docs`. For separate local processes, use the existing backend virtual environment, install `backend/requirements.txt`, run migrations with `alembic upgrade head`, start `uvicorn app.main:app --reload` from `backend`, and run `npm install && npm start` from `frontend`. Set the backend database URL for your local PostgreSQL instance when not using Docker.
+The existing Docker setup is `docker compose up --build`. Run `docker compose exec backend alembic upgrad11e head` on **both new and existing databases** to add the WhatsApp test history fields. On a fresh database, also run `docker compose exec backend python -m app.scripts.create_super_admin --username admin` and enter a password at the prompt. The frontend runs at `http://localhost:1711`, backend at `http://localhost:1609`, and Swagger UI at `http://localhost:1609/docs`. For separate local processes, use the existing backend virtual environment, install `backend/requirements.txt`, run migrations with `alembic upgrade head`, start `uvicorn app.main:app --reload` from `backend`, and run `npm install && npm start` from `frontend`. Set the backend database URL for your local PostgreSQL instance when not using Docker.
 
-Log into the application. Its existing bearer token is required on all WhatsApp endpoints; in Swagger, authorize with the login route first. The Dispatch page first lets you select one or more contacts for a client demonstration, then opens the message composer. The selected contact IDs are saved as **demo selections** in dispatch records, but their numbers are **never sent to Meta**. Every click on Send makes one request to `WHATSAPP_TEST_RECIPIENT`. The old `/api/v1/dispatch/send` route returns 410 while this testing integration is active. Meta-accepted test sends appear in the **same** `/dispatch/history` list as successful existing dispatches, with Meta's message ID, actual test recipient, sender, timestamp, text or attachment, and demo selections. A selected contact's conversation also shows its accepted test records labeled as a demo selection.
+Log into the application. Its existing bearer token is required on all WhatsApp endpoints; in Swagger, authorize with the login route first. The Dispatch page now selects a customer and shows the assigned marketing person. In test mode, Send always requests `WHATSAPP_TEST_RECIPIENT`; checking the customer copy option also requests `WHATSAPP_CUSTOMER_TEST_RECIPIENT`. The old `/api/v1/dispatch/send` route returns 410. Test sends appear in `/dispatch/history` with the customer, assigned marketing person, and actual test destination. The older `/api/v1/whatsapp/text` and `/media` demo endpoints remain available; their selected contact IDs are demo selections only.
 
 Only sends made after this history change are recorded. Earlier test messages that were not saved in the database cannot be reconstructed from Meta without incoming-message or history synchronization support.
 
@@ -24,7 +24,7 @@ From the **verified recipient's** WhatsApp account, send a normal message to **M
 
 ## Send tests
 
-On the Dispatch page, select one or more contacts, click **Continue to message**, enter text, and click the send arrow. For an attachment, choose JPG/JPEG or PNG (up to 5 MB) or PDF (up to 100 MB). Any text entered with a file is its caption; only **one** media message is submitted. The outgoing bubble shows **Accepted**; hover over it to see Meta's returned message ID. Acceptance does not establish delivery or reading.
+On the Dispatch page, select a customer, enter text, and click the send arrow. For an attachment, choose JPG/JPEG or PNG (up to 5 MB) or PDF (up to 100 MB). Any text entered with a file is its caption. In test mode, one media message is submitted to the primary test number and, if the customer copy is checked, one more to the second test number. The results show whether Meta accepted each request. Acceptance does not establish delivery or reading.
 
 API endpoints (all require `Authorization: Bearer <app-login-token>`):
 
@@ -63,4 +63,26 @@ Swagger UI exposes the same text and media forms. Use **Authorize** with the app
 | 502 media or message failure | Check backend log for the HTTP status and Meta error code, then verify Meta dashboard settings. |
 | 504 timeout | Check WhatsApp before retrying; an uncertain response may have been accepted by Meta. |
 
-The backend logs only status/error codes, not tokens or raw Meta error bodies. A successful HTTP response means Meta **accepted** the request, not that the recipient received it. Failed and uncertain Meta submissions remain in the database for diagnostics but are hidden from the History page, contact conversations, and dashboard recent list. A timeout is recorded as **status uncertain** because Meta might have accepted it. Local validation errors are rejected before a history record is created. No webhooks or delivery/read tracking are included.
+The backend logs only status/error codes, not tokens or raw Meta error bodies. A successful HTTP response means Meta **accepted** the request, not that the recipient received it. Failed and uncertain Meta submissions remain in the database for diagnostics but are hidden from the History page, contact conversations, and dashboard recent list. A timeout is recorded as **status uncertain** because Meta might have accepted it. Local validation errors are rejected before a history record is created. Delivery and read tracking require the webhook setup below.
+
+## Delivery and read receipts
+
+The backend accepts Meta webhooks at `/api/v1/whatsapp/webhook`. Set `WHATSAPP_WEBHOOK_VERIFY_TOKEN` to a long random value you choose, and `WHATSAPP_APP_SECRET` to the app secret from Meta's developer dashboard. Keep both private and restart the backend after setting them. The verify token is separate from the access token and the app secret.
+
+Expose the backend over public HTTPS (see [ngrok.md](ngrok.md) for local testing), then enter the complete URL, for example `https://your-domain.example/api/v1/whatsapp/webhook`, and the same verify token in the WhatsApp webhook configuration in Meta's app dashboard. Subscribe to the `messages` field and ensure the WhatsApp Business Account is subscribed to the app. Test by sending a message and checking dispatch history after delivery or reading. A local tunnel must remain running; use a stable public URL in production.
+
+Signed delivery updates change the existing message status to sent, delivered, read or failed. Read status depends on WhatsApp providing a read receipt. Messages sent before webhook setup may not have delivery updates, and a status received before its message ID is saved is retried while a send is pending.
+
+## Incoming replies
+
+Run `alembic upgrade head` after deploying the incoming-message changes. Subscribe to Meta's `messages` webhook field and use the phone number ID belonging to the same business number configured in the backend. The backend verifies signatures and records new incoming text and attachment metadata; duplicate webhook deliveries are ignored. Incoming messages received before this feature is active are not imported.
+
+Messages appear in customer or marketing-person chats when their WhatsApp sender number matches the saved phone number, including local numbers normalized using `WHATSAPP_DEFAULT_COUNTRY_CODE`. If multiple saved people share that number, the message appears in each matching chat. Incoming messages from unknown numbers remain stored but are not shown in a conversation until that number is saved. In the customer dispatch conversation, a marketing person's explicit reply to a specific dispatch is also shown when the reply refers to that dispatch. Chats refresh while open.
+
+Received image and document previews are fetched from Meta when opened; the application stores their metadata, not a permanent local copy. They may become unavailable when Meta no longer retains them. The app's local attachment-cleanup schedule does not apply to those remote files. Some WhatsApp message types show a placeholder rather than a full preview.
+
+## Custom text and the 24-hour reply window
+
+The dispatch screen allows free-form text only when every selected destination has an incoming message recorded in the previous 24 hours. Attachment templates remain available when the window is closed. In test mode the app checks the actual configured test destinations, not the selected contacts' numbers. A reply is normally reflected on the open dispatch screen within 15 seconds; the backend checks again when sending and before retrying failed text.
+
+The check uses signed incoming events stored by this app. If the webhook is offline, misconfigured, or the reply arrived before incoming-message storage was enabled, the app cannot confirm that reply and conservatively treats the window as closed. Meta remains authoritative and can still reject a send. Keep the webhook publicly reachable over HTTPS, subscribe to `messages`, and verify the business phone number and app secret.

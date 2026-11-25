@@ -54,19 +54,19 @@ label {
 
 input,
 select {
-  background: var(--surface-soft);
+  background-color: var(--surface-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-main);
   font: inherit;
   min-width: 0;
-  padding: 11px 14px;
+  padding: 11px 38px 11px 14px;
   transition: var(--transition);
 }
 
 input:focus,
 select:focus {
-  background: var(--surface);
+  background-color: var(--surface);
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-soft);
 }
@@ -248,4 +248,16 @@ td {
   }
 
   .management-form .field-with-strength { margin-bottom: 32px; }
+}
+
+@media (max-width: 600px) {
+  .section-header, .management-form, .table-wrap, .reset-modal {
+    padding: 16px;
+  }
+  th, td { padding: 11px 14px; }
+  .user-actions { flex-wrap: wrap; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions button { width: 100%; }
+  .reset-modal { max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .modal-backdrop { align-items: flex-end; padding: 0; }
 }

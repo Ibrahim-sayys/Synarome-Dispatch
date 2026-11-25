@@ -12,13 +12,13 @@
 
   <form [formGroup]="userForm" (ngSubmit)="createUser()" class="management-form">
     <label>
-      Username
+      <span>Username <span class="required-indicator" aria-label="required">*</span></span>
       <input type="text" placeholder="e.g. staff_user" formControlName="username" autocomplete="off" />
     </label>
 
     <div class="field-with-strength">
       <label>
-        Password
+        <span>Password <span class="required-indicator" aria-label="required">*</span></span>
         <input type="password" placeholder="Min. 8 characters" formControlName="password" autocomplete="new-password" />
       </label>
       @if (createUserPassword) {
@@ -33,7 +33,7 @@
     </div>
 
     <label>
-      Role
+      <span>Role <span class="required-indicator" aria-label="required">*</span></span>
       <select formControlName="role">
         @for (role of roleOptions(); track role.value) {
           <option [value]="role.value">{{ role.label }}</option>
@@ -89,7 +89,7 @@
       </div>
 
       <label>
-        New password
+        <span>New password <span class="required-indicator" aria-label="required">*</span></span>
         <input type="password" placeholder="Enter new password (min. 8 characters)" formControlName="password" autocomplete="new-password" />
       </label>
 
@@ -115,7 +115,7 @@
 }
 
 @if (deleteTarget(); as user) {
-  <div class="modal-backdrop" (click)="closeDeleteDialog()">
+  <div class="modal-backdrop">
     <section class="reset-modal" role="dialog" aria-modal="true" [attr.aria-label]="'Delete user ' + user.username" (click)="$event.stopPropagation()">
       <div>
         <p class="eyebrow">Delete user</p>

@@ -1,10 +1,11 @@
 import { DatePipe } from '@angular/common';
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { EMPTY, Subscription, catchError, from, mergeMap, tap } from 'rxjs';
+import { EMPTY, Subscription, catchError, from, mergeMap, tap, concat, of, interval, switchMap } from 'rxjs';
 import { ContactsService, MarketingPerson } from '../../core/contacts.service';
-import { DispatchRecord, DispatchService } from '../../core/dispatch.service';
+import { DispatchRecord, DispatchService, mergeDispatchStatus } from '../../core/dispatch.service';
 import { ActionNotice } from '../../core/action-notice';
+import { matchesChatSearch } from '../../shared/chat-search';
 
 @Component({
   selector: 'app-contacts',
@@ -14,6 +15,7 @@ import { ActionNotice } from '../../core/action-notice';
 })
 export class Contacts implements OnInit, OnDestroy {
   protected readonly contacts = signal<MarketingPerson[]>([]);
+  protected readonly isAddOpen = signal(false);
   protected readonly searchTerm = signal('');
   protected readonly editingContact = signal<MarketingPerson | null>(null);
   protected readonly openMenuId = signal<number | null>(null);
@@ -25,13 +27,14 @@ export class Contacts implements OnInit, OnDestroy {
   protected readonly isErrorMessage = this.notice.isError;
   protected readonly selectedContact = signal<MarketingPerson | null>(null);
   protected readonly contactHistory = signal<DispatchRecord[]>([]);
+  protected readonly historySearch = signal('');
   protected readonly isLoadingContactHistory = signal(false);
   protected readonly historyError = signal('');
   protected readonly previewUrls = signal<Record<number, string>>({});
   protected readonly previewErrors = signal<Set<number>>(new Set());
   protected readonly expandedImage = signal<{ url: string; label: string } | null>(null);
   protected readonly conversation = computed(() => {
-    const records = [...this.contactHistory()].reverse();
+    const records = [...this.contactHistory()].reverse().filter((record) => matchesChatSearch(record, this.historySearch()));
     let previousDay = '';
     return records.map((record) => {
       const parsed = record.timestamp ? new Date(record.timestamp) : null;
@@ -47,6 +50,8 @@ export class Contacts implements OnInit, OnDestroy {
 
   private historyRequest?: Subscription;
   private previewRequests?: Subscription;
+  private statusRequest?: Subscription;
+  private readonly requestedPreviewIds = new Set<number>();
 
   private readonly contactsService = inject(ContactsService);
   private readonly dispatchService = inject(DispatchService);
@@ -54,17 +59,21 @@ export class Contacts implements OnInit, OnDestroy {
 
   protected readonly contactForm = this.formBuilder.group({
     full_name: ['', [Validators.required, Validators.minLength(2)]],
-    phone_number: ['', [Validators.required, Validators.minLength(11)]],
+    phone_number: ['', [Validators.required, Validators.pattern(/^[0-9]{11,15}$/)]],
   });
 
   protected readonly editForm = this.formBuilder.group({
     full_name: ['', [Validators.required, Validators.minLength(2)]],
-    phone_number: ['', [Validators.required, Validators.minLength(11)]],
+    phone_number: ['', [Validators.required, Validators.pattern(/^[0-9]{11,15}$/)]],
     is_active: [true],
   });
 
   ngOnInit(): void {
     this.loadContacts();
+    this.statusRequest = this.dispatchService.monitorStatuses(() => this.contactHistory()).subscribe((statuses) => {
+      const byId = new Map(statuses.map((status) => [status.id, status]));
+      this.contactHistory.update((records) => records.map((record) => mergeDispatchStatus(record, byId.get(record.id))));
+    });
   }
 
   protected loadContacts(): void {
@@ -77,6 +86,16 @@ export class Contacts implements OnInit, OnDestroy {
   protected search(value: string): void {
     this.searchTerm.set(value);
     this.loadContacts();
+  }
+
+  protected openAddDialog(): void {
+    this.clearMessage();
+    this.contactForm.reset({ full_name: '', phone_number: '' });
+    this.isAddOpen.set(true);
+  }
+
+  protected closeAddDialog(): void {
+    if (!this.isSaving()) this.isAddOpen.set(false);
   }
 
   protected saveContact(): void {
@@ -100,6 +119,7 @@ export class Contacts implements OnInit, OnDestroy {
           full_name: '',
           phone_number: '',
         });
+        this.isAddOpen.set(false);
         this.isSaving.set(false);
         this.loadContacts();
       },
@@ -115,13 +135,27 @@ export class Contacts implements OnInit, OnDestroy {
     this.editingContact.set(contact);
     this.editForm.setValue({
       full_name: contact.full_name,
-      phone_number: contact.phone_number,
+      phone_number: contact.phone_number.replace(/\D/g, ''),
       is_active: contact.is_active,
     });
   }
 
   protected toggleMenu(contactId: number): void {
     this.openMenuId.update((id) => id === contactId ? null : contactId);
+  }
+
+  protected onActionsClick(event: MouseEvent): void {
+    if (!(event.target instanceof Element) || !event.target.closest('.contact-menu, .contact-menu-trigger')) {
+      this.closeMenu();
+    }
+    event.stopPropagation();
+  }
+
+  protected digitsOnly(event: Event, form: 'add' | 'edit'): void {
+    const input = event.target as HTMLInputElement;
+    const digits = input.value.replace(/[^0-9]/g, '').slice(0, 15);
+    input.value = digits;
+    (form === 'add' ? this.contactForm : this.editForm).controls.phone_number.setValue(digits);
   }
 
   @HostListener('document:click')
@@ -163,8 +197,9 @@ export class Contacts implements OnInit, OnDestroy {
     this.selectedContact.set(contact);
     this.historyError.set('');
     this.isLoadingContactHistory.set(true);
-    this.historyRequest = this.dispatchService.listHistory({ person_id: contact.id }).subscribe({
+    this.historyRequest = concat(of(0), interval(15000)).pipe(switchMap(() => this.dispatchService.listFullHistory({ person_id: contact.id }))).subscribe({
       next: (history) => {
+        if (JSON.stringify(history) === JSON.stringify(this.contactHistory()) && !this.isLoadingContactHistory()) return;
         this.contactHistory.set(history);
         this.isLoadingContactHistory.set(false);
         this.scrollToLatest();
@@ -180,9 +215,12 @@ export class Contacts implements OnInit, OnDestroy {
   protected closeContactHistory(): void {
     this.historyRequest?.unsubscribe();
     this.previewRequests?.unsubscribe();
+    this.previewRequests = undefined;
+    this.requestedPreviewIds.clear();
     Object.values(this.previewUrls()).forEach((url) => URL.revokeObjectURL(url));
     this.selectedContact.set(null);
     this.contactHistory.set([]);
+    this.historySearch.set('');
     this.previewUrls.set({});
     this.previewErrors.set(new Set());
     this.expandedImage.set(null);
@@ -191,29 +229,30 @@ export class Contacts implements OnInit, OnDestroy {
   }
 
   private loadImagePreviews(history: DispatchRecord[]): void {
-    this.previewRequests = from(history.filter((record) => this.isImage(record))).pipe(
+    const fresh = history.filter((record) => this.isImage(record) && !this.requestedPreviewIds.has(record.id));
+    fresh.forEach((record) => this.requestedPreviewIds.add(record.id));
+    this.previewRequests ??= new Subscription();
+    this.previewRequests.add(from(fresh).pipe(
       mergeMap((record) => this.dispatchService.downloadFile(record.id).pipe(
         tap((blob) => {
-          const stayAtLatest = this.isNearLatest();
           const url = URL.createObjectURL(blob);
           this.previewUrls.update((current) => ({ ...current, [record.id]: url }));
-          if (stayAtLatest) this.scrollToLatest();
         }),
         catchError(() => {
           this.previewErrors.update((current) => new Set([...current, record.id]));
           return EMPTY;
         }),
       ), 4),
-    ).subscribe();
+    ).subscribe());
   }
 
   protected isImage(record: DispatchRecord): boolean {
     return /\.(png|jpe?g)$/i.test(record.file_path ?? '');
   }
 
-  private isNearLatest(): boolean {
-    const thread = this.conversationThread()?.nativeElement;
-    return !!thread && thread.scrollHeight - thread.clientHeight - thread.scrollTop < 120;
+  protected searchHistory(value: string): void {
+    this.historySearch.set(value);
+    this.scrollToLatest();
   }
 
   private scrollToLatest(): void {
@@ -228,7 +267,20 @@ export class Contacts implements OnInit, OnDestroy {
   }
 
   protected contactStatus(record: DispatchRecord, contactId: number): string {
+    if (record.direction === 'incoming') return 'Received';
+    if (record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') {
+      if (record.whatsapp_status === 'read') return 'Read';
+      if (record.whatsapp_status === 'delivered') return 'Delivered';
+      if (record.whatsapp_status === 'sent') return 'Sent';
+      if (record.whatsapp_status === 'accepted') return 'Meta accepted';
+      if (record.whatsapp_status === 'unknown') return 'Status uncertain';
+      if (record.whatsapp_status === 'failed') return 'Failed';
+      return 'Pending';
+    }
     if (record.send_mode === 'whatsapp_test') {
+      if (record.whatsapp_status === 'read') return 'Read';
+      if (record.whatsapp_status === 'delivered') return 'Delivered';
+      if (record.whatsapp_status === 'sent') return 'Sent';
       if (record.whatsapp_status === 'accepted') return 'Meta accepted';
       if (record.whatsapp_status === 'unknown') return 'Status uncertain';
       if (record.whatsapp_status === 'failed') return 'Failed';
@@ -270,10 +322,12 @@ export class Contacts implements OnInit, OnDestroy {
     else if (this.selectedContact()) this.closeContactHistory();
     else if (this.deleteTarget()) this.closeDeleteDialog();
     else if (this.editingContact()) this.closeEditDialog();
+    else if (this.isAddOpen()) this.closeAddDialog();
     else this.closeMenu();
   }
 
   ngOnDestroy(): void {
+    this.statusRequest?.unsubscribe();
     this.closeContactHistory();
     this.notice.destroy();
   }

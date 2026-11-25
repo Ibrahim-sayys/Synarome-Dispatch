@@ -17,10 +17,11 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render application heading', async () => {
+  it('should render the customer and marketing navigation', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Bilty and WhatsApp dispatch management');
+    expect(compiled.querySelector('nav[aria-label="Primary navigation"]')?.textContent).toContain('Marketing persons');
+    expect(compiled.querySelector('nav[aria-label="Primary navigation"]')?.textContent).toContain('Customers');
   });
 });

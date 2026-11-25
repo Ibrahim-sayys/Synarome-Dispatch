@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, get_db
 from app.models.marketing_person import MarketingPerson
+from app.models.customer import Customer
 from app.schemas.marketing_person import (
     MarketingPersonCreate,
     MarketingPersonResponse,
@@ -160,6 +161,9 @@ def delete_contact(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Contact not found",
         )
+
+    if db.query(Customer.id).filter(Customer.marketing_person_id == contact_id, Customer.is_deleted.is_(False)).first():
+        raise HTTPException(status_code=409, detail="Reassign this marketing person's customers before deleting them.")
 
     contact.is_active = False
     contact.is_deleted = True

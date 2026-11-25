@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { DispatchRecord, DispatchService, HistoryFilters, HistorySender } from '../../core/dispatch.service';
+import { DispatchRecord, DispatchService, HistoryFilters, HistorySender, mergeDispatchStatus } from '../../core/dispatch.service';
 
 @Component({
   selector: 'app-dispatch-history',
@@ -12,6 +12,9 @@ import { DispatchRecord, DispatchService, HistoryFilters, HistorySender } from '
 })
 export class DispatchHistoryPage implements OnInit, OnDestroy {
   protected readonly history = signal<DispatchRecord[]>([]);
+  protected readonly page = signal(1);
+  protected readonly total = signal(0);
+  protected readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / 20)));
   protected readonly historyUsers = signal<HistorySender[]>([]);
   protected readonly isLoading = signal(false);
   protected readonly error = signal('');
@@ -23,16 +26,17 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
   protected readonly toTime = signal('');
   protected readonly userId = signal<number | null>(null);
   protected readonly dispatchId = signal<number | null>(null);
+  protected readonly customerId = signal<number | null>(null);
   protected readonly previewUrl = signal<string | null>(null);
   protected readonly previewTitle = signal('');
   protected readonly loadingPreviewId = signal<number | null>(null);
   protected readonly hasFilters = computed(() => Boolean(
     this.search().trim() || this.fromDate() || this.toDate() ||
-    this.fromTime() || this.toTime() || this.userId() !== null || this.dispatchId() !== null,
+    this.fromTime() || this.toTime() || this.userId() !== null || this.dispatchId() !== null || this.customerId() !== null,
   ));
   protected readonly hasOtherFilters = computed(() => Boolean(
     this.search().trim() || this.fromDate() || this.toDate() ||
-    this.fromTime() || this.toTime() || this.dispatchId() !== null,
+    this.fromTime() || this.toTime() || this.dispatchId() !== null || this.customerId() !== null,
   ));
 
   private readonly dispatchService = inject(DispatchService);
@@ -42,12 +46,20 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
   private sendersRequest?: Subscription;
   private routeRequest?: Subscription;
   private previewRequest?: Subscription;
+  private statusRequest?: Subscription;
 
   ngOnInit(): void {
+    this.statusRequest = this.dispatchService.monitorStatuses(() => this.history()).subscribe((statuses) => {
+      const byId = new Map(statuses.map((status) => [status.id, status]));
+      this.history.update((records) => records.map((record) => mergeDispatchStatus(record, byId.get(record.id))));
+    });
     this.loadSenders();
     this.routeRequest = this.route.queryParamMap.subscribe((params) => {
       const rawId = params.get('dispatch_id');
       this.dispatchId.set(rawId && /^\d+$/.test(rawId) && Number(rawId) > 0 ? Number(rawId) : null);
+      const rawCustomerId = params.get('customer_id');
+      this.customerId.set(rawCustomerId && /^\d+$/.test(rawCustomerId) && Number(rawCustomerId) > 0 ? Number(rawCustomerId) : null);
+      this.page.set(1);
       this.loadHistory();
     });
   }
@@ -84,11 +96,19 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
       to_time: this.toTime(),
       user_id: this.userId(),
       dispatch_id: this.dispatchId(),
+      customer_id: this.customerId(),
       timezone_offset_minutes: new Date().getTimezoneOffset(),
     };
-    this.historyRequest = this.dispatchService.listHistory(filters).subscribe({
-      next: (records) => {
-        this.history.set(records);
+    this.historyRequest = this.dispatchService.listHistoryPage(filters, this.page()).subscribe({
+      next: (result) => {
+        const lastPage = Math.max(1, Math.ceil(result.total / 20));
+        if (this.page() > lastPage) {
+          this.page.set(lastPage);
+          this.loadHistory();
+          return;
+        }
+        this.history.set(result.items);
+        this.total.set(result.total);
         this.isLoading.set(false);
       },
       error: () => {
@@ -105,6 +125,7 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
     if (filter === 'fromTime') this.fromTime.set(value);
     if (filter === 'toTime') this.toTime.set(value);
     if (filter === 'userId') this.userId.set(value ? Number(value) : null);
+    this.page.set(1);
     if (this.dispatchId() !== null) this.clearRecordFocus();
     else this.loadHistory();
   }
@@ -120,8 +141,16 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
     this.fromTime.set('');
     this.toTime.set('');
     this.userId.set(null);
-    if (this.dispatchId() !== null) this.clearRecordFocus();
+    this.page.set(1);
+    if (this.dispatchId() !== null || this.customerId() !== null) this.clearRecordFocus();
     else this.loadHistory();
+  }
+
+  protected changePage(delta: number): void {
+    const next = this.page() + delta;
+    if (next < 1 || next > this.pageCount() || this.isLoading()) return;
+    this.page.set(next);
+    this.loadHistory();
   }
 
   protected isImageFile(path: string | null | undefined): boolean {
@@ -129,7 +158,19 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
   }
 
   protected statusText(record: DispatchRecord): string {
+    if (record.send_mode === 'customer_dispatch' || record.send_mode === 'customer_test') {
+      if (record.whatsapp_status === 'read') return 'Read';
+      if (record.whatsapp_status === 'delivered') return 'Delivered';
+      if (record.whatsapp_status === 'sent') return 'Sent';
+      if (record.whatsapp_status === 'accepted') return 'Meta accepted';
+      if (record.whatsapp_status === 'unknown') return 'Status uncertain';
+      if (record.whatsapp_status === 'failed') return 'Failed';
+      return 'Pending';
+    }
     if (record.send_mode === 'whatsapp_test') {
+      if (record.whatsapp_status === 'read') return 'Read';
+      if (record.whatsapp_status === 'delivered') return 'Delivered';
+      if (record.whatsapp_status === 'sent') return 'Sent';
       if (record.whatsapp_status === 'accepted') return 'Meta accepted';
       if (record.whatsapp_status === 'unknown') return 'Status uncertain';
       if (record.whatsapp_status === 'failed') return 'Failed';
@@ -183,6 +224,7 @@ export class DispatchHistoryPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.statusRequest?.unsubscribe();
     this.historyRequest?.unsubscribe();
     this.sendersRequest?.unsubscribe();
     this.routeRequest?.unsubscribe();

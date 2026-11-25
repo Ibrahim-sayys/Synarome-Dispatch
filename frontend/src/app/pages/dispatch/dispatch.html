@@ -26,9 +26,49 @@
     } @else if (selected(); as customer) {
       <header class="chat-header compose-header">
         <button type="button" class="back-button" aria-label="Back to customers" (click)="back()" [disabled]="sending()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><span>Back</span></button>
-        <div class="chat-identity"><div class="chat-avatar">{{ customer.full_name.charAt(0).toUpperCase() }}</div><div class="compose-customer-name"><h2>{{ customer.full_name }}</h2><span>{{ customer.city || 'City not set' }}</span></div></div>
-        <input class="compose-chat-search" type="search" placeholder="Search this chat" [attr.aria-label]="'Search chat with ' + customer.full_name" [value]="threadSearch()" (input)="threadSearch.set($any($event.target).value)" />
-        <button type="button" class="add-recipient-button" (click)="openPicker()" [disabled]="sending()">+ Add recipient</button>
+        <div class="chat-identity">
+          <div class="chat-avatar">{{ customer.full_name.charAt(0).toUpperCase() }}</div>
+          <div class="compose-customer-name">
+            <h2>{{ customer.full_name }}</h2>
+            <span>{{ customer.city || 'City not set' }}</span>
+          </div>
+          <!-- Icon actions sit right next to the name -->
+          <div class="compose-header-actions">
+            @if (threadSearchOpen()) {
+              <input #chatSearchInput class="compose-chat-search-inline" type="search"
+                placeholder="Search this chat"
+                [attr.aria-label]="'Search chat with ' + customer.full_name"
+                [value]="threadSearch()"
+                (input)="threadSearch.set($any($event.target).value)"
+                (blur)="threadSearchOpen.set(false); threadSearch.set('')" />
+            }
+            <button type="button" class="header-icon-btn search-icon-btn"
+              [class.active]="threadSearchOpen()"
+              [attr.aria-label]="threadSearchOpen() ? 'Close search' : 'Search this chat'"
+              [attr.aria-pressed]="threadSearchOpen()"
+              (click)="threadSearchOpen.set(!threadSearchOpen())">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                <!-- strainer lines -->
+                <line x1="8" y1="10" x2="14" y2="10"/>
+                <line x1="9" y1="13" x2="13" y2="13"/>
+              </svg>
+            </button>
+            <button type="button" class="header-icon-btn add-recipient-icon-btn"
+              aria-label="Add recipient"
+              (click)="openPicker()"
+              [disabled]="sending()">
+              <!-- Person silhouette -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <line x1="19" y1="8" x2="19" y2="14"/>
+                <line x1="22" y1="11" x2="16" y2="11"/>
+              </svg>
+            </button>
+          </div>
+        </div>
         <span class="compose-count">{{ recipientCount() }} recipient{{ recipientCount() === 1 ? '' : 's' }}</span>
       </header>
       <div class="compose-recipient-strip"><span class="recipient-pill required"><strong>{{ customer.marketing_person.full_name }}</strong><small>Assigned marketing person</small></span>@if (includeCustomer()) { <span class="recipient-pill"><strong>{{ customer.full_name }}</strong><small>End customer</small><button type="button" [disabled]="sending()" [attr.aria-label]="'Remove ' + customer.full_name" (click)="toggleMainCustomer()">&times;</button></span> }@for (recipient of extraRecipients(); track recipient.kind + recipient.id) { <span class="recipient-pill"><strong>{{ recipient.name }}</strong><small>{{ recipient.kind === 'customer' ? 'Customer' : 'Marketing' }}</small><button type="button" [disabled]="sending()" [attr.aria-label]="'Remove ' + recipient.name" (click)="removeExtra(recipient)">&times;</button></span> }</div>

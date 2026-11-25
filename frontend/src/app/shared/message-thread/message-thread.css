@@ -34,3 +34,10 @@
 .image-expanded-header button { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--text-main); cursor: pointer; font-size: 1.2rem; height: 34px; width: 34px; }
 .image-expanded-dialog img { max-height: calc(95dvh - 76px); max-width: 100%; object-fit: contain; }
 @media (max-width: 640px) { .conversation-thread { padding: 18px 12px; } .message-bubble { max-width: 93%; } }
+@media (max-width: 480px) {
+  .conversation-thread { padding: 14px 10px; gap: 10px; }
+  .message-bubble { max-width: 96%; min-width: min(180px, 100%); padding: 10px 11px 8px; }
+  .message-document { width: 100%; max-width: 100%; }
+  .image-placeholder { min-width: min(200px, 100%); }
+  .image-expanded-backdrop { padding: 10px; }
+}

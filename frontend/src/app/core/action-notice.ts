@@ -13,7 +13,7 @@ export class ActionNotice {
     if (typeof window !== 'undefined') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    this.timer = setTimeout(() => this.clear(), 5000);
+    this.timer = setTimeout(() => this.clear(), 4000);
   }
 
   clear(): void {

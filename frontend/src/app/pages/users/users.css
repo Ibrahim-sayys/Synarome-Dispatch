@@ -249,3 +249,15 @@ td {
 
   .management-form .field-with-strength { margin-bottom: 32px; }
 }
+
+@media (max-width: 600px) {
+  .section-header, .management-form, .table-wrap, .reset-modal {
+    padding: 16px;
+  }
+  th, td { padding: 11px 14px; }
+  .user-actions { flex-wrap: wrap; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions button { width: 100%; }
+  .reset-modal { max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .modal-backdrop { align-items: flex-end; padding: 0; }
+}

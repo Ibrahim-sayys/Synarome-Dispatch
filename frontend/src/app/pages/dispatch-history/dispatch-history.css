@@ -60,3 +60,14 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 
 @media (max-width: 1150px) { .history-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .filter-search { grid-column: span 2; } }
 @media (max-width: 650px) { .history-page-header { align-items: flex-start; } .history-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filter-search { grid-column: span 2; } .history-results-header { align-items: flex-start; flex-direction: column; } }
+
+@media (max-width: 480px) {
+  .history-filters { grid-template-columns: 1fr; }
+  .filter-search { grid-column: span 1; }
+  .history-page-header { gap: 10px; }
+  .history-card { padding: 14px; }
+  .card-header, .card-footer { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .message-id { max-width: 100%; }
+  .history-pagination { gap: 8px; }
+  .history-pagination button { flex: 1; min-width: 80px; padding: 8px 10px; font-size: 0.82rem; }
+}

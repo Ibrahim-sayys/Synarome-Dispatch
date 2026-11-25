@@ -53,3 +53,15 @@
 @media (max-width: 980px) { .contact-list article.customer-card { grid-template-columns: minmax(0, 1fr) 120px auto; } .customer-card .customer-note { grid-column: 1 / -1; grid-row: 2; } }
 @media (max-width: 680px) { .customer-fields { grid-template-columns: 1fr; } .contact-list article.customer-card { grid-template-columns: 1fr; } .customer-card .customer-note { grid-column: auto; grid-row: auto; } .customer-card .actions { justify-content: flex-start; } }
 @media (max-width: 680px) { .customer-filters { grid-template-columns: 1fr; } .customer-filters .search { min-width: 0; } }
+@media (max-width: 480px) {
+  .edit-modal.customer-dialog { width: calc(100vw - 20px); max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .customer-fields { grid-template-columns: 1fr; }
+  .directory-summary-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .add-directory-button { width: 100%; }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions button { width: 100%; }
+  .customer-filters { gap: 10px; padding: 12px; border-radius: var(--radius-md); }
+  .phone-filter-options { flex-wrap: wrap; gap: 6px; }
+  .pagination { justify-content: center; gap: 6px; }
+  .pagination button { flex: 1; }
+}

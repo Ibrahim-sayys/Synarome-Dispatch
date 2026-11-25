@@ -45,7 +45,15 @@ def list_incoming(current_user: CurrentUser, db: Session = Depends(get_db),
     else:
         customer = customer_id or conversation_customer_id
         number = saved_number(db, 'customer', customer)
-        query = db.query(IncomingMessage).filter(IncomingMessage.sender_number == number) if number else None
+        numbers = {number} if number else set()
+        if conversation_customer_id:
+            entity = db.get(Customer, customer)
+            person = entity.marketing_person
+            if person and not person.is_deleted:
+                person_number = normalized(person.phone_number)
+                if person_number:
+                    numbers.add(person_number)
+        query = db.query(IncomingMessage).filter(IncomingMessage.sender_number.in_(numbers)) if numbers else None
         # A marketing person's explicit reply to a specific dispatch belongs to that customer conversation too.
         if conversation_customer_id:
             context_ids = db.query(Dispatch.whatsapp_message_id).filter(Dispatch.customer_id == customer, Dispatch.send_mode == 'customer_dispatch',

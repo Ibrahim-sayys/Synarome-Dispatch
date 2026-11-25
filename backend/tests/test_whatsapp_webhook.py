@@ -13,6 +13,25 @@ from app.models.marketing_person import MarketingPerson
 
 
 class WebhookTests(WhatsAppRouteTests):
+    async def test_dispatch_conversation_includes_assigned_marketing_messages(self):
+        from datetime import datetime, timezone
+        person = self.db.query(MarketingPerson).filter_by(phone_number='15550000001').one()
+        customer = Customer(full_name='Customer', phone_number='15550000002', marketing_person_id=person.id)
+        self.db.add(customer)
+        self.db.add_all([
+            IncomingMessage(whatsapp_message_id='marketing-message', sender_number=person.phone_number,
+                            message_type='text', message_text='General reply', timestamp=datetime.now(timezone.utc)),
+            IncomingMessage(whatsapp_message_id='unrelated-message', sender_number='15550000003',
+                            message_type='text', message_text='Unrelated', timestamp=datetime.now(timezone.utc)),
+        ])
+        self.db.commit()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=__import__('app.main', fromlist=['app']).app), base_url='http://test') as client:
+            response = await client.get('/api/v1/incoming', params={'conversation_customer_id': customer.id})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual([item['message_text'] for item in response.json()], ['General reply'])
+            response = await client.get('/api/v1/incoming', params={'customer_id': customer.id})
+            self.assertEqual(response.json(), [])
+
     async def test_incoming_media_is_fetched_from_meta_and_rejects_untrusted_urls(self):
         from datetime import datetime, timezone
         message = IncomingMessage(whatsapp_message_id='wamid.inbound.image', sender_number='15550000001',

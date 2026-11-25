@@ -405,7 +405,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 420px;
+  max-width: 100%;
 }
 
 .file-chip {
@@ -541,6 +541,46 @@
   }
 
   .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .stat-value {
+    font-size: 1.8rem;
+  }
+
+  .recent-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .recent-meta {
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .welcome-banner {
+    padding: 18px 16px;
+  }
+
+  .welcome-banner h2 {
+    font-size: 1.3rem;
+  }
+
+  .activity-panel,
+  .shortcuts-card {
+    padding: 16px;
+  }
+
+  .stat-card {
+    padding: 16px 16px;
   }
 }

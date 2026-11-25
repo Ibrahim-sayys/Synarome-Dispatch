@@ -75,6 +75,7 @@ export class DispatchPage implements OnInit, OnDestroy {
   protected readonly lastSend = signal<SendResponse | null>(null);
   protected readonly threadRecords = signal<DispatchRecord[]>([]);
   protected readonly threadSearch = signal('');
+  protected readonly threadSearchOpen = signal(false);
   protected readonly threadScrollToLatest = signal(true);
   protected readonly threadLoading = signal(false);
   protected readonly threadError = signal('');

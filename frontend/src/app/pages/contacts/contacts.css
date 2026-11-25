@@ -529,5 +529,28 @@ strong {
   .conversation-thread { padding: 18px 12px; }
   .message-bubble { max-width: 93%; }
 }
+
+@media (max-width: 480px) {
+  .modal-backdrop { padding: 0; align-items: flex-end; }
+  .edit-modal {
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 92dvh;
+    overflow-y: auto;
+    width: 100%;
+    max-width: 100%;
+  }
+  .modal-actions { flex-direction: column-reverse; }
+  .modal-actions button { width: 100%; justify-content: center; }
+  .directory-summary-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .add-directory-button { width: 100%; }
+  .contact-card { padding: 14px 12px; }
+  .history-modal { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+}
 .conversation-row.incoming-row { justify-content: flex-start; }
 .incoming-row .message-bubble { background: var(--surface); border-color: var(--border); border-radius: 17px 17px 17px 5px; }
+
+/* WhatsApp check badges */
+.wa-badge { display: inline-block; font-size: 0.74rem; font-weight: 600; margin-top: 4px; padding: 2px 0; }
+.wa-checking { color: var(--text-muted); }
+.wa-confirmed { color: var(--success); }
+.wa-unknown { color: var(--warning); }
